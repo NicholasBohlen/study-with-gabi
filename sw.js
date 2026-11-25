@@ -1,7 +1,7 @@
 // Offline support. Network first (always asking the server, never the browser's
 // HTTP cache, so files from two versions never mix), the saved copy when there's
 // no signal or the network takes too long.
-const CACHE = 'study-with-gabi-v3';
+const CACHE = 'study-with-gabi-v4';
 const SHELL = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './content.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'

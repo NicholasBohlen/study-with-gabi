@@ -1,149 +1,24 @@
 {
-  "id": "sample-2026-winter",
-  "title": "Sample content (replace with her slides)",
-  "defaults": { "offDays": [0], "finalReview": true },
-  "topics": [
+  "id": "gabi",
+  "title": "Study with Gabi",
+  "defaults": {
+    "offDays": [
+      0
+    ],
+    "finalReview": true
+  },
+  "courses": [
     {
-      "id": "cardiac-cycle",
-      "block": "Cardio",
-      "title": "Cardiac cycle and heart sounds",
-      "source": "Sample",
-      "points": [
-        "S1 is closure of the mitral and tricuspid valves and marks the start of systole.",
-        "S2 is closure of the aortic and pulmonic valves and marks the start of diastole.",
-        "Isovolumetric contraction: all valves closed, pressure rising, volume unchanged.",
-        "S3 happens in early diastole during rapid ventricular filling; can be normal in young people and pregnancy, otherwise suggests volume overload or heart failure.",
-        "S4 is atrial contraction against a stiff ventricle (for example LV hypertrophy); always abnormal in adults."
-      ],
-      "cards": [
-        { "front": "What valve closures make S1?", "back": "Mitral and tricuspid (AV valves)" },
-        { "front": "What valve closures make S2?", "back": "Aortic and pulmonic (semilunar valves)" },
-        { "front": "When in the cycle do you hear S3?", "back": "Early diastole, during rapid ventricular filling" },
-        { "front": "What causes S4?", "back": "Atrial contraction pushing blood into a stiff, noncompliant ventricle" },
-        { "front": "Phase between mitral closure and aortic opening?", "back": "Isovolumetric contraction" }
-      ],
-      "questions": [
-        {
-          "q": "A 68-year-old with long-standing hypertension has an extra heart sound just before S1. What does it most likely reflect?",
-          "options": ["Rapid ventricular filling into a dilated ventricle", "Atrial contraction against a stiff left ventricle", "Opening of a stenotic mitral valve", "Normal finding in older adults"],
-          "answer": 1,
-          "explanation": "A sound just before S1 is S4. It comes from atrial kick against a stiff, hypertrophied LV, common with long-standing hypertension."
-        },
-        {
-          "q": "During which phase are all four heart valves closed while ventricular pressure rises?",
-          "options": ["Rapid ejection", "Isovolumetric relaxation", "Isovolumetric contraction", "Reduced filling"],
-          "answer": 2,
-          "explanation": "In isovolumetric contraction the AV valves have closed and the semilunar valves have not opened yet, so pressure rises with no change in volume."
-        },
-        {
-          "q": "An S3 is most consistent with which condition in a 60-year-old?",
-          "options": ["Aortic stenosis with LV hypertrophy", "Heart failure with volume overload", "Isolated hypertension", "Normal aging"],
-          "answer": 1,
-          "explanation": "In older adults S3 points to increased filling into a dilated, volume-overloaded ventricle, as in heart failure."
-        }
-      ]
+      "id": "winter-2026-physio",
+      "term": "Winter 2026",
+      "title": "Physiology (sample)",
+      "file": "courses/winter-2026-physio.json"
     },
     {
-      "id": "acid-base",
-      "block": "Renal",
-      "title": "Metabolic acidosis and the anion gap",
-      "source": "Sample",
-      "points": [
-        "Anion gap = Na minus (Cl + HCO3). Normal is roughly 8 to 12.",
-        "Winter's formula predicts respiratory compensation: expected PaCO2 = 1.5 x HCO3 + 8, plus or minus 2.",
-        "High anion gap causes include lactic acidosis, ketoacidosis, renal failure, and toxic alcohols (methanol, ethylene glycol).",
-        "Normal anion gap (hyperchloremic) causes include diarrhea and renal tubular acidosis."
-      ],
-      "cards": [
-        { "front": "Anion gap formula", "back": "Na − (Cl + HCO3)" },
-        { "front": "Winter's formula", "back": "Expected PaCO2 = 1.5 × HCO3 + 8 (± 2)" },
-        { "front": "Classic GI cause of normal anion gap acidosis", "back": "Diarrhea (loss of bicarbonate)" },
-        { "front": "Two toxic alcohols that cause high anion gap acidosis", "back": "Methanol and ethylene glycol" }
-      ],
-      "questions": [
-        {
-          "q": "Na 140, Cl 104, HCO3 12. What is the anion gap?",
-          "options": ["12", "20", "24", "36"],
-          "answer": 2,
-          "explanation": "140 − (104 + 12) = 24, which is elevated."
-        },
-        {
-          "q": "HCO3 is 14. Using Winter's formula, what PaCO2 range shows appropriate respiratory compensation?",
-          "options": ["19 to 23", "27 to 31", "34 to 38", "40 to 44"],
-          "answer": 1,
-          "explanation": "1.5 × 14 + 8 = 29, so 27 to 31 is expected. Higher means a concurrent respiratory acidosis."
-        },
-        {
-          "q": "Which cause gives a normal anion gap metabolic acidosis?",
-          "options": ["Diabetic ketoacidosis", "Ethylene glycol ingestion", "Severe diarrhea", "Lactic acidosis from sepsis"],
-          "answer": 2,
-          "explanation": "Diarrhea loses bicarbonate and chloride rises to compensate, so the gap stays normal. The others add unmeasured anions."
-        }
-      ]
-    },
-    {
-      "id": "cholinergic-pharm",
-      "block": "Pharm",
-      "title": "Cholinergic drugs and toxicity",
-      "source": "Sample",
-      "points": [
-        "Atropine is a muscarinic antagonist.",
-        "Organophosphates irreversibly inhibit acetylcholinesterase, causing cholinergic excess.",
-        "Organophosphate treatment: atropine for muscarinic effects plus pralidoxime to regenerate acetylcholinesterase (if given early).",
-        "Anticholinergic toxicity: hot, dry, flushed skin, dilated pupils, urinary retention, delirium."
-      ],
-      "cards": [
-        { "front": "Mechanism of atropine", "back": "Competitive muscarinic receptor antagonist" },
-        { "front": "How do organophosphates cause toxicity?", "back": "Irreversibly inhibit acetylcholinesterase, so ACh builds up" },
-        { "front": "Two drugs for organophosphate poisoning", "back": "Atropine and pralidoxime" },
-        { "front": "What does pralidoxime do?", "back": "Regenerates acetylcholinesterase if given before 'aging'" }
-      ],
-      "questions": [
-        {
-          "q": "A farmer has miosis, salivation, bronchorrhea, and muscle fasciculations. Which drug reverses the fasciculations?",
-          "options": ["Atropine", "Pralidoxime", "Physostigmine", "Neostigmine"],
-          "answer": 1,
-          "explanation": "Atropine only blocks muscarinic effects. Fasciculations are nicotinic, so pralidoxime (regenerating acetylcholinesterase) is needed."
-        },
-        {
-          "q": "Which finding fits anticholinergic toxicity?",
-          "options": ["Pinpoint pupils", "Diaphoresis", "Urinary retention", "Bradycardia"],
-          "answer": 2,
-          "explanation": "Muscarinic blockade causes urinary retention, along with dry skin, mydriasis, and tachycardia."
-        }
-      ]
-    },
-    {
-      "id": "glycolysis",
-      "block": "Biochem",
-      "title": "Glycolysis regulation",
-      "source": "Sample",
-      "points": [
-        "PFK-1 is the rate-limiting enzyme of glycolysis.",
-        "PFK-1 is activated by AMP and fructose-2,6-bisphosphate and inhibited by ATP and citrate.",
-        "Net yield of glycolysis is 2 ATP and 2 NADH per glucose.",
-        "Pyruvate kinase deficiency causes hemolytic anemia because RBCs depend on glycolysis for ATP."
-      ],
-      "cards": [
-        { "front": "Rate-limiting enzyme of glycolysis", "back": "Phosphofructokinase-1 (PFK-1)" },
-        { "front": "Activators of PFK-1", "back": "AMP and fructose-2,6-bisphosphate" },
-        { "front": "Inhibitors of PFK-1", "back": "ATP and citrate" },
-        { "front": "Net ATP from glycolysis per glucose", "back": "2 ATP (plus 2 NADH)" }
-      ],
-      "questions": [
-        {
-          "q": "Which molecule most strongly activates PFK-1 in the fed state?",
-          "options": ["Citrate", "ATP", "Fructose-2,6-bisphosphate", "Acetyl-CoA"],
-          "answer": 2,
-          "explanation": "Insulin raises fructose-2,6-bisphosphate, the most potent activator of PFK-1. Citrate and ATP inhibit it."
-        },
-        {
-          "q": "A child has chronic hemolytic anemia and an enzyme defect in glycolysis. Which enzyme is most likely deficient?",
-          "options": ["Glucose-6-phosphate dehydrogenase", "Pyruvate kinase", "Hexokinase IV (glucokinase)", "Pyruvate dehydrogenase"],
-          "answer": 1,
-          "explanation": "Pyruvate kinase deficiency is the classic glycolytic cause of hemolysis. G6PD is in the pentose phosphate pathway, not glycolysis."
-        }
-      ]
+      "id": "winter-2026-pharm",
+      "term": "Winter 2026",
+      "title": "Pharm & Biochem (sample)",
+      "file": "courses/winter-2026-pharm.json"
     }
   ]
 }

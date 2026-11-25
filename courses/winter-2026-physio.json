@@ -1,0 +1,159 @@
+{
+  "topics": [
+    {
+      "id": "cardiac-cycle",
+      "block": "Cardio",
+      "title": "Cardiac cycle and heart sounds",
+      "source": "Sample",
+      "points": [
+        "S1 is closure of the mitral and tricuspid valves and marks the start of systole.",
+        "S2 is closure of the aortic and pulmonic valves and marks the start of diastole.",
+        "Isovolumetric contraction: all valves closed, pressure rising, volume unchanged.",
+        "S3 happens in early diastole during rapid ventricular filling; can be normal in young people and pregnancy, otherwise suggests volume overload or heart failure.",
+        "S4 is atrial contraction against a stiff ventricle (for example LV hypertrophy); always abnormal in adults."
+      ],
+      "cards": [
+        {
+          "front": "What valve closures make S1?",
+          "back": "Mitral and tricuspid (AV valves)"
+        },
+        {
+          "front": "What valve closures make S2?",
+          "back": "Aortic and pulmonic (semilunar valves)"
+        },
+        {
+          "front": "When in the cycle do you hear S3?",
+          "back": "Early diastole, during rapid ventricular filling"
+        },
+        {
+          "front": "What causes S4?",
+          "back": "Atrial contraction pushing blood into a stiff, noncompliant ventricle"
+        },
+        {
+          "front": "Phase between mitral closure and aortic opening?",
+          "back": "Isovolumetric contraction"
+        }
+      ],
+      "questions": [
+        {
+          "q": "A 68-year-old with long-standing hypertension has an extra heart sound just before S1. What does it most likely reflect?",
+          "options": [
+            "Rapid ventricular filling into a dilated ventricle",
+            "Atrial contraction against a stiff left ventricle",
+            "Opening of a stenotic mitral valve",
+            "Normal finding in older adults"
+          ],
+          "answer": 1,
+          "explanation": "A sound just before S1 is S4. It comes from atrial kick against a stiff, hypertrophied LV, common with long-standing hypertension."
+        },
+        {
+          "q": "During which phase are all four heart valves closed while ventricular pressure rises?",
+          "options": [
+            "Rapid ejection",
+            "Isovolumetric relaxation",
+            "Isovolumetric contraction",
+            "Reduced filling"
+          ],
+          "answer": 2,
+          "explanation": "In isovolumetric contraction the AV valves have closed and the semilunar valves have not opened yet, so pressure rises with no change in volume."
+        },
+        {
+          "q": "An S3 is most consistent with which condition in a 60-year-old?",
+          "options": [
+            "Aortic stenosis with LV hypertrophy",
+            "Heart failure with volume overload",
+            "Isolated hypertension",
+            "Normal aging"
+          ],
+          "answer": 1,
+          "explanation": "In older adults S3 points to increased filling into a dilated, volume-overloaded ventricle, as in heart failure."
+        }
+      ],
+      "notes": [
+        {
+          "heading": "The cycle in order",
+          "text": "- Atrial systole: the atria top off the ventricles (the S4 moment if the ventricle is stiff).\n- Isovolumetric contraction: mitral and tricuspid close (S1), pressure climbs with every valve shut.\n- Ejection: pressure beats the aorta, the aortic valve opens.\n- Isovolumetric relaxation: aortic and pulmonic close (S2), pressure falls with every valve shut.\n- Filling: mitral opens, rapid filling first (the S3 moment in an overloaded ventricle)."
+        },
+        {
+          "heading": "Telling S3 from S4",
+          "text": "S3 comes just after S2, in early diastole. Think of blood rushing into a big, floppy, volume-overloaded ventricle (\"Ken-TUCK-y\").\n\nS4 comes just before S1, in late diastole. Think of the atrium pushing against a stiff, thick ventricle (\"TEN-nes-see\"). It needs a working atrial kick, so it is absent in atrial fibrillation."
+        }
+      ]
+    },
+    {
+      "id": "acid-base",
+      "block": "Renal",
+      "title": "Metabolic acidosis and the anion gap",
+      "source": "Sample",
+      "points": [
+        "Anion gap = Na minus (Cl + HCO3). Normal is roughly 8 to 12.",
+        "Winter's formula predicts respiratory compensation: expected PaCO2 = 1.5 x HCO3 + 8, plus or minus 2.",
+        "High anion gap causes include lactic acidosis, ketoacidosis, renal failure, and toxic alcohols (methanol, ethylene glycol).",
+        "Normal anion gap (hyperchloremic) causes include diarrhea and renal tubular acidosis."
+      ],
+      "cards": [
+        {
+          "front": "Anion gap formula",
+          "back": "Na − (Cl + HCO3)"
+        },
+        {
+          "front": "Winter's formula",
+          "back": "Expected PaCO2 = 1.5 × HCO3 + 8 (± 2)"
+        },
+        {
+          "front": "Classic GI cause of normal anion gap acidosis",
+          "back": "Diarrhea (loss of bicarbonate)"
+        },
+        {
+          "front": "Two toxic alcohols that cause high anion gap acidosis",
+          "back": "Methanol and ethylene glycol"
+        }
+      ],
+      "questions": [
+        {
+          "q": "Na 140, Cl 104, HCO3 12. What is the anion gap?",
+          "options": [
+            "12",
+            "20",
+            "24",
+            "36"
+          ],
+          "answer": 2,
+          "explanation": "140 − (104 + 12) = 24, which is elevated."
+        },
+        {
+          "q": "HCO3 is 14. Using Winter's formula, what PaCO2 range shows appropriate respiratory compensation?",
+          "options": [
+            "19 to 23",
+            "27 to 31",
+            "34 to 38",
+            "40 to 44"
+          ],
+          "answer": 1,
+          "explanation": "1.5 × 14 + 8 = 29, so 27 to 31 is expected. Higher means a concurrent respiratory acidosis."
+        },
+        {
+          "q": "Which cause gives a normal anion gap metabolic acidosis?",
+          "options": [
+            "Diabetic ketoacidosis",
+            "Ethylene glycol ingestion",
+            "Severe diarrhea",
+            "Lactic acidosis from sepsis"
+          ],
+          "answer": 2,
+          "explanation": "Diarrhea loses bicarbonate and chloride rises to compensate, so the gap stays normal. The others add unmeasured anions."
+        }
+      ],
+      "notes": [
+        {
+          "heading": "Step by step",
+          "text": "- Low pH with low bicarbonate means metabolic acidosis.\n- Anion gap = Na − (Cl + HCO3). Normal is about 8 to 12.\n- High gap: an unmeasured acid was added.\n- Normal gap: bicarbonate was lost, and chloride rose to replace it."
+        },
+        {
+          "heading": "Causes",
+          "text": "High gap (MUDPILES): methanol, uremia, DKA, propylene glycol, iron or isoniazid, lactic acidosis, ethylene glycol, salicylates.\n\nNormal gap (HARDASS): hyperalimentation, acetazolamide, renal tubular acidosis, diarrhea, Addison's, spironolactone, saline infusion."
+        }
+      ]
+    }
+  ]
+}

@@ -7,7 +7,7 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 | File | What it is |
 |---|---|
 | `index.html`, `app.js`, `styles.css` | The app |
-| `content.json` | **The study material.** This is the only file you change each semester. |
+| `content.json`, `courses/` | **The study material:** the list of classes, and one file of topics per class. |
 | `sw.js`, `manifest.webmanifest`, icons | Make it installable and work offline |
 | `slides/` | Drop source PowerPoints/PDFs here to turn into content.json. Never uploaded (listed in `.gitignore`). |
 
@@ -31,27 +31,40 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 
 - **Today:** the topics planned for today, anything carried over from missed days, and up to 3 review topics that are due.
 - **Calendar:** the whole break as a month view. Each day shows a dot per topic in its block's color (faint = planned, solid = done, orange ring = behind). Tap a day to see its topics and reviews.
-- **Topics:** every topic grouped by block, with progress per block and when each is planned or due for review.
+- **Topics:** the classes she's studying now (or all of them, by semester), with progress per class and when each topic is planned or due for review.
 - **Each topic:** key points, then flashcards (cards she marks "Again" come back a few cards later), then a quiz with explanations.
+- **In depth:** for a topic she doesn't know yet, or scored under 80% on: the questions she missed with the right answers, the notes, every card laid out, and worked questions to check herself on. Linked from the topic page, the quiz score, and the end of the flashcards when she missed some.
 - **Spacing:** the quiz score decides when a topic comes back. Under 60% returns the next day, 60 to 79% in 3 days, and 80% or higher in 7 days.
 - **Last study day:** a mixed final quiz across everything, weighted toward her weakest topics. This can be turned off in Settings.
 - **Missed days:** unfinished topics show as "Carried over." **Save and rebuild plan** in Settings spreads them over the days left.
 
-## Updating content (new semester or new slides)
+## Updating content (new semester, new class, new slides)
 
-Replace `content.json` in the repository. She gets the update the next time she opens the app with internet. Updates show on the second launch, because the app opens the saved copy first and downloads the new one in the background.
+Content is a library of classes. `content.json` lists them, and each class's topics live in their own file under `courses/`. She picks what she's studying now in **Settings > Studying now** (grouped by semester), and Today, the calendar and quizzes use only those. Progress on every class is kept, so old material is still there under **Topics > All courses**.
 
-- A new `id` at the top starts fresh progress, which is what you want for a new semester.
-- Keep the same `id` to add topics mid-break. Existing progress stays, and new topics are added to the plan.
-- If you change `app.js` or `styles.css`, bump `CACHE` in `sw.js` (for example to `study-with-gabi-v2`) so phones pick up the change.
+- **New class or semester:** add its file under `courses/` and a line for it in `content.json`. Put newer semesters last. The newest semester's classes are picked by default; `"current": true` on a class overrides that.
+- **New topics mid-break:** add them to the class's file. Progress stays and they join the plan.
+- **Don't change** a class's or topic's `id` once she's used it. Progress is tied to them. Keep the top-level `id` the same too; changing it starts every class from zero.
+- She gets changes the next time she opens the app with internet.
 
-### content.json format
+### content.json
 
 ```json
 {
-  "id": "fall-2026",
-  "title": "Fall 2026 review",
+  "id": "gabi",
+  "title": "Study with Gabi",
   "defaults": { "offDays": [0], "finalReview": true },
+  "courses": [
+    { "id": "fall-2026-cardio", "term": "Fall 2026", "title": "Cardiology", "file": "courses/fall-2026-cardio.json" },
+    { "id": "spring-2027-renal", "term": "Spring 2027", "title": "Renal", "file": "courses/spring-2027-renal.json" }
+  ]
+}
+```
+
+### A class file (courses/....json)
+
+```json
+{
   "topics": [
     {
       "id": "unique-topic-id",
@@ -59,6 +72,7 @@ Replace `content.json` in the repository. She gets the update the next time she 
       "title": "Topic name",
       "source": "Lectures 3-4",
       "points": ["Key point", "Key point"],
+      "notes": [{ "heading": "Section", "text": "Longer explanation.\n\n- A bullet\n- Another bullet" }],
       "cards": [{ "front": "Question", "back": "Answer" }],
       "questions": [{
         "q": "Question stem",
@@ -71,7 +85,7 @@ Replace `content.json` in the repository. She gets the update the next time she 
 }
 ```
 
-`answer` is the position of the correct option, counting from 0. The app shuffles the options. Topics go on the plan in the order they're listed.
+`answer` is the position of the correct option, counting from 0. The app shuffles the options. Topics go on the plan in the order they're listed. `notes` is optional: the fuller explanation shown on the in-depth page (a blank line starts a new paragraph, lines starting "- " are bullets).
 
 ## Progress and backup
 

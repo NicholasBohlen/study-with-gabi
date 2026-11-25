@@ -19,6 +19,10 @@ const pretty = s => parse(s).toLocaleDateString(undefined, { weekday: 'short', m
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const topicById = id => content.topics.find(t => t.id === id);
+// The courses she's studying now (Settings), and their topics. Progress on other courses is kept.
+const isStudying = t => state.settings.courses.includes(t.course);
+const studying = () => content.topics.filter(isStudying);
+const courseById = id => content.courses.find(c => c.id === id);
 const tp = id => (state.topics[id] ||= { done: false, attempts: 0, lastScore: null, bestScore: null, completedOn: null, nextReview: null });
 const save = () => { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { alert('Could not save progress: ' + e.message); } };
 
@@ -29,8 +33,18 @@ function defaultSettings() {
     start: s.start || today(),
     end: s.end || addDays(today(), 20),
     offDays: s.offDays || [],          // 0=Sun … 6=Sat
-    finalReview: s.finalReview !== false
+    finalReview: s.finalReview !== false,
+    courses: defaultCourses()
   };
+}
+
+// Courses marked "current" in content.json, else the newest semester's (the last listed), else all.
+function defaultCourses() {
+  const cs = content.courses;
+  const cur = cs.filter(c => c.current);
+  if (cur.length) return cur.map(c => c.id);
+  const last = cs[cs.length - 1];
+  return (last?.term ? cs.filter(c => c.term === last.term) : cs).map(c => c.id);
 }
 
 function loadState() {
@@ -42,9 +56,13 @@ function loadState() {
     // New content set (new semester) or first launch: start fresh.
     state = { contentId: content.id, settings: defaultSettings(), plan: {}, topics: {} };
   }
-  // Make sure every topic in content.json is on the plan (handles new topics added mid-break).
+  state.settings.courses = (state.settings.courses || []).filter(courseById);
+  if (!state.settings.courses.length) state.settings.courses = defaultCourses();
+  // Make sure the plan holds exactly the topics she's studying (handles topics added mid-break).
   const planned = new Set(Object.values(state.plan).flat());
-  if (content.topics.some(t => !planned.has(t.id))) rebuildPlan();
+  const now = studying();
+  // A course file that didn't load (offline) leaves the plan alone.
+  if (!content.missing.length && (now.some(t => !planned.has(t.id)) || planned.size !== now.length)) rebuildPlan();
   save();
 }
 
@@ -63,8 +81,8 @@ function finalDay() {
 // Keeps finished topics where they were, spreads unfinished ones over the remaining days.
 function rebuildPlan() {
   const plan = {};
-  const done = content.topics.filter(t => tp(t.id).done);
-  const todo = content.topics.filter(t => !tp(t.id).done);
+  const done = studying().filter(t => tp(t.id).done);
+  const todo = studying().filter(t => !tp(t.id).done);
   for (const t of done) (plan[tp(t.id).completedOn || state.settings.start] ||= []).push(t.id);
 
   const fd = finalDay();
@@ -93,7 +111,7 @@ function dueToday() {
     if (d > horizon) continue;
     for (const id of ids) if (!tp(id).done && topicById(id)) fresh.push({ id, carried: d < t && t >= firstDay });
   }
-  const reviews = content.topics
+  const reviews = studying()
     .filter(x => tp(x.id).done && tp(x.id).nextReview && tp(x.id).nextReview <= t)
     .sort((a, b) => (tp(a.id).lastScore ?? 0) - (tp(b.id).lastScore ?? 0))
     .slice(0, 3)
@@ -116,7 +134,7 @@ function blockColor(block) {
 const scoreClass = s => s == null ? 'good' : s < 60 ? 'bad' : s < 80 ? 'warn' : 'good';
 const shortDay = s => parse(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 const longDay = s => parse(s).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-const reviewsOn = d => content.topics.filter(t => tp(t.id).done && tp(t.id).nextReview === d).map(t => t.id);
+const reviewsOn = d => studying().filter(t => tp(t.id).done && tp(t.id).nextReview === d).map(t => t.id);
 
 // Back link: goes back if we came from inside the app, otherwise to the fallback page.
 let navDepth = 0;
@@ -191,8 +209,8 @@ function greeting() {
 
 function viewToday() {
   const { fresh, reviews, preview } = dueToday();
-  const total = content.topics.length;
-  const doneCount = content.topics.filter(t => tp(t.id).done).length;
+  const total = studying().length;
+  const doneCount = studying().filter(t => tp(t.id).done).length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
   const days = studyDays();
   const idx = days.indexOf(today());
@@ -202,7 +220,8 @@ function viewToday() {
     : today() > state.settings.end ? 'Break is over. Nice work.' : 'Day off. Rest up.';
 
   let h = `<section class="hero">
-      <div class="grow"><p class="eyebrow">${longDay(today())}</p><h1>${greeting()}</h1><p class="hero-sub">${status}</p></div>
+      <div class="grow"><p class="eyebrow">${longDay(today())}</p><h1>${greeting()}</h1><p class="hero-sub">${status}</p>
+        <p class="hero-courses">${state.settings.courses.map(id => esc(courseById(id)?.title)).join(' · ')}</p></div>
       ${ring(pct, `${doneCount}/${total}`)}
     </section>
     ${weekStrip()}`;
@@ -247,8 +266,8 @@ function viewCalendar(sel) {
     grid += `<a href="#/calendar/${d}" class="${cls}"><span class="num">${parse(d).getDate()}</span>${dotsHtml(info, 3)}</a>`;
   }
 
-  const done = content.topics.filter(x => tp(x.id).done).length;
-  let h = `<div class="page-head"><h1>Calendar</h1><p class="hint">${shortDay(state.settings.start)} to ${shortDay(state.settings.end)} · ${content.topics.length} topics over ${studyDays().length} study days · ${done} done</p></div>
+  const done = studying().filter(x => tp(x.id).done).length;
+  let h = `<div class="page-head"><h1>Calendar</h1><p class="hint">${shortDay(state.settings.start)} to ${shortDay(state.settings.end)} · ${studying().length} topics over ${studyDays().length} study days · ${done} done</p></div>
     <div class="card cal">
       <div class="cal-nav"><a href="#/calendar/${prev}" aria-label="Previous month">‹</a><b>${monthName}</b><a href="#/calendar/${next}" aria-label="Next month">›</a></div>
       <div class="cal-grid">${grid}</div>
@@ -268,24 +287,30 @@ function viewCalendar(sel) {
   app.innerHTML = h;
 }
 
-/* ---------- topics (all, by block) ---------- */
-function viewTopics() {
-  const groups = {};
-  for (const t of content.topics) (groups[t.block || 'Other'] ||= []).push(t.id);
-  let h = `<div class="page-head"><h1>Topics</h1><p class="hint">Everything in this set, grouped by block.</p></div>`;
-  for (const [block, ids] of Object.entries(groups)) {
+/* ---------- topics (by semester and course) ---------- */
+function viewTopics(which) {
+  const all = which === 'all';
+  const courses = content.courses.filter(c => all || state.settings.courses.includes(c.id));
+  let h = `<div class="page-head"><h1>Topics</h1>
+    <div class="seg"><a href="#/topics" class="${all ? '' : 'on'}">Studying now</a><a href="#/topics/all" class="${all ? 'on' : ''}">All courses</a></div></div>`;
+  let term = null;
+  for (const c of courses) {
+    const ids = content.topics.filter(t => t.course === c.id).map(t => t.id);
+    if (!ids.length) continue;
+    if (c.term && c.term !== term && (all || new Set(courses.map(x => x.term)).size > 1)) { term = c.term; h += `<h2 class="term">${esc(c.term)}</h2>`; }
     const done = ids.filter(id => tp(id).done).length;
-    h += `<div class="block-head" style="--c:${blockColor(block)}"><span class="swatch"></span><b class="grow">${esc(block)}</b>
-      <span class="hint">${done}/${ids.length}</span></div>
-      <div class="mini-progress" style="--c:${blockColor(block)}"><div style="width:${Math.round(done / ids.length * 100)}%"></div></div>`;
+    h += `<div class="course-head"><b class="grow">${esc(c.title)}</b><span class="hint">${done}/${ids.length} done</span></div>
+      <div class="mini-progress"><div style="width:${Math.round(done / ids.length * 100)}%"></div></div>`;
     h += ids.map(id => {
       const d = plannedDate(id);
       const p = tp(id);
-      const when = p.done ? (p.nextReview ? `Review ${p.nextReview <= today() ? 'due' : shortDay(p.nextReview)}` : '') : d ? `Planned ${shortDay(d)}` : '';
+      const when = p.done ? (p.nextReview && isStudying(topicById(id)) ? `Review ${p.nextReview <= today() ? 'due' : shortDay(p.nextReview)}` : '') : d ? `Planned ${shortDay(d)}` : '';
       return topicRow(id, { tag: when ? `<span>${when}</span> · ` : '' });
     }).join('');
   }
-  h += `<a class="btn block secondary" href="#/quiz/__mixed">Quick mixed quiz</a>`;
+  if (!courses.length) h += `<div class="card empty"><p class="hint">No courses picked. Choose what you're studying in Settings.</p><a class="btn secondary" href="#/settings">Settings</a></div>`;
+  if (content.missing.length) h += `<p class="hint">Couldn't load ${content.missing.map(esc).join(', ')}. Open the app once with internet.</p>`;
+  if (!all && courses.length) h += `<a class="btn block secondary" href="#/quiz/__mixed">Quick mixed quiz</a>`;
   app.innerHTML = h;
 }
 
@@ -302,15 +327,63 @@ function viewTopic(id) {
       ${p.done ? `<p><span class="chip good">Done</span> <span class="hint">Best ${p.bestScore ?? '–'}% · last ${p.lastScore ?? '–'}%${p.nextReview ? ` · review ${p.nextReview <= today() ? 'due now' : shortDay(p.nextReview)}` : ''}</span></p>` : ''}
     </div>
     ${t.points?.length ? `<div class="card"><h3 class="card-title">Key points</h3><ul class="points">${t.points.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    ${p.done && (p.lastScore ?? 100) < 80 ? `<a class="card deep-cta warn" href="#/deep/${encodeURIComponent(id)}"><span class="grow"><b>You scored ${p.lastScore}% last time</b><span class="hint">Go over it in depth: what you missed, full notes, worked questions</span></span><span class="chev">›</span></a>` : ''}
     <div class="steps">
+      ${!p.done ? `<a class="step" href="#/deep/${encodeURIComponent(id)}"><span class="step-n alt">?</span><span class="grow"><b>Don't know this yet?</b><span class="hint">Start with the in-depth review</span></span><span class="chev">›</span></a>` : ''}
       ${t.cards?.length ? `<a class="step" href="#/cards/${encodeURIComponent(id)}"><span class="step-n">1</span><span class="grow"><b>Flashcards</b><span class="hint">${t.cards.length} cards</span></span><span class="chev">›</span></a>` : ''}
       ${t.questions?.length ? `<a class="step" href="#/quiz/${encodeURIComponent(id)}"><span class="step-n">${t.cards?.length ? 2 : 1}</span><span class="grow"><b>Quiz</b><span class="hint">${t.questions.length} questions · sets the next review</span></span><span class="chev">›</span></a>` : ''}
+      ${p.done ? `<a class="step" href="#/deep/${encodeURIComponent(id)}"><span class="step-n alt">≡</span><span class="grow"><b>In depth</b><span class="hint">Notes, every card and worked questions</span></span><span class="chev">›</span></a>` : ''}
     </div>
     ${!t.questions?.length && !p.done ? `<button class="btn block ghost" id="markdone">Mark done</button>` : ''}`;
   wireBack();
   document.getElementById('markdone')?.addEventListener('click', () => {
     Object.assign(p, { done: true, completedOn: p.completedOn || today() }); scheduleReview(id, 80); save(); location.hash = '#/today';
   });
+}
+
+/* ---------- in depth ---------- */
+// Plain text to HTML: blank lines split paragraphs, lines starting "- " are bullets.
+function richText(text) {
+  return String(text || '').split(/\n\s*\n/).map(par => {
+    const lines = par.split('\n');
+    if (lines.every(l => /^\s*[-•]\s/.test(l))) return `<ul class="points">${lines.map(l => `<li>${esc(l.replace(/^\s*[-•]\s/, ''))}</li>`).join('')}</ul>`;
+    return `<p>${lines.map(esc).join('<br>')}</p>`;
+  }).join('');
+}
+
+function viewDeep(id) {
+  const t = topicById(id);
+  if (!t) return notFound();
+  const p = tp(id);
+  const qs = t.questions || [];
+  const missed = (p.missed || []).map(q => qs.find(x => x.q === q)).filter(Boolean);
+  const answer = q => q.options[q.answer];
+  const sections = [];
+  if (missed.length) sections.push(['missed', `What you missed (${missed.length})`, missed.map(q => `<div class="card worked miss">
+      <p class="wq">${esc(q.q)}</p><p class="wa">✓ ${esc(answer(q))}</p>${q.explanation ? `<p class="hint">${esc(q.explanation)}</p>` : ''}</div>`).join('')]);
+  if (t.notes?.length) sections.push(['notes', 'Notes', t.notes.map(n => `<div class="card notes">${n.heading ? `<h3 class="card-title">${esc(n.heading)}</h3>` : ''}${richText(n.text)}</div>`).join('')]);
+  if (t.points?.length) sections.push(['points', 'Key points', `<div class="card"><ul class="points">${t.points.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`]);
+  if (t.cards?.length) sections.push(['cards', `All cards (${t.cards.length})`, `<div class="card qa-list">${t.cards.map(c => `<div class="qa"><p class="q">${esc(c.front)}</p><p class="a">${esc(c.back)}</p></div>`).join('')}</div>`]);
+  const practice = qs.filter(q => !missed.includes(q));
+  if (practice.length) sections.push(['practice', `Worked questions (${practice.length})`, `<p class="hint">Answer in your head, then tap to check.</p>` + practice.map(q => `<details class="card worked">
+      <summary>${esc(q.q)}</summary>
+      <ol class="wopts">${q.options.map((o, i) => `<li class="${i === q.answer ? 'right' : ''}">${esc(o)}</li>`).join('')}</ol>
+      ${q.explanation ? `<p class="hint">${esc(q.explanation)}</p>` : ''}</details>`).join('')]);
+
+  app.innerHTML = `${backLink('#/topic/' + encodeURIComponent(id), t.title)}
+    <div class="topic-head" style="--c:${blockColor(t.block)}">
+      <p class="eyebrow">In depth${t.block ? ` · ${esc(t.block)}` : ''}</p><h1>${esc(t.title)}</h1>
+      <p class="hint">Take your time. Read it through, then test yourself.</p>
+    </div>
+    ${sections.length > 1 ? `<div class="jump">${sections.map(([k, title]) => `<button data-jump="${k}">${esc(title.replace(/ \(\d+\)$/, ''))}</button>`).join('')}</div>` : ''}
+    ${sections.map(([k, title, body]) => `<h2 id="s-${k}">${esc(title)}</h2>${body}`).join('') || '<div class="card empty"><p class="hint">Nothing more on this topic yet.</p></div>'}
+    <h2>Now test yourself</h2>
+    <div class="two">
+      ${t.cards?.length ? `<a class="btn secondary" href="#/cards/${encodeURIComponent(id)}">Flashcards</a>` : ''}
+      ${qs.length ? `<a class="btn" href="#/quiz/${encodeURIComponent(id)}">Take the quiz</a>` : ''}
+    </div>`;
+  wireBack();
+  app.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => document.getElementById('s-' + b.dataset.jump).scrollIntoView({ behavior: 'smooth' }));
 }
 
 /* ---------- flashcards ---------- */
@@ -325,6 +398,7 @@ function viewCards(id) {
     app.innerHTML = `<div class="card empty"><div class="empty-icon">✓</div><h1>Cards done</h1>
       <p class="hint">${s.again ? `You missed ${s.again} along the way and went back over them.` : 'Clean run.'}</p></div>
       <a class="btn block" href="#/quiz/${encodeURIComponent(id)}">Take the quiz</a>
+      ${s.again ? `<a class="btn block secondary" href="#/deep/${encodeURIComponent(id)}">Go over it in depth first</a>` : ''}
       <button class="btn block ghost" id="again">Run cards again</button>`;
     document.getElementById('again').onclick = () => { session = null; viewCards(id); };
     return;
@@ -365,7 +439,7 @@ function buildQuestions(id) {
     const n = id === '__final' ? 25 : 10;
     // Weight toward weak topics: each question appears once, plus extra copies for low scorers.
     const pool = [];
-    for (const t of content.topics) for (const q of t.questions || []) {
+    for (const t of studying()) for (const q of t.questions || []) {
       const sc = tp(t.id).lastScore;
       const w = sc == null ? 2 : sc < 60 ? 3 : sc < 80 ? 2 : 1;
       for (let i = 0; i < w; i++) pool.push({ ...q, topic: t.id });
@@ -385,7 +459,7 @@ function viewQuiz(id) {
       const order = shuffle(q.options.map((_, i) => i));
       return { ...q, options: order.map(i => q.options[i]), answer: order.indexOf(q.answer) };
     });
-    session = { kind: 'quiz', id, qs, i: 0, picked: null, right: 0, byTopic: {} };
+    session = { kind: 'quiz', id, qs, i: 0, picked: null, right: 0, byTopic: {}, missed: {} };
   }
   const s = session;
   const title = id === '__final' ? 'Final review' : id === '__mixed' ? 'Mixed quiz' : topicById(id).title;
@@ -412,6 +486,7 @@ function viewQuiz(id) {
     const ok = s.picked === q.answer;
     if (ok) s.right++;
     const bt = (s.byTopic[q.topic] ||= { r: 0, n: 0 }); bt.n++; if (ok) bt.r++;
+    if (!ok) (s.missed[q.topic] ||= []).push(q.q);
     viewQuiz(id);
     document.getElementById('next')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
@@ -428,12 +503,14 @@ function quizResult(id, title) {
       for (const [tid, { r, n }] of Object.entries(s.byTopic)) {
         const p = tp(tid); const tpct = Math.round(r / n * 100);
         if (p.done && tpct < 60) p.nextReview = today();
+        if (s.missed[tid]) p.missed = [...new Set([...s.missed[tid], ...(p.missed || [])])].slice(0, 20);
       }
     } else {
       const p = tp(id);
       p.attempts++; p.lastScore = pct; p.bestScore = Math.max(p.bestScore ?? 0, pct);
       if (!p.done) { p.done = true; p.completedOn = today(); }
       scheduleReview(id, pct);
+      p.missed = s.missed[id] || [];
     }
     save();
   }
@@ -442,7 +519,9 @@ function quizResult(id, title) {
   app.innerHTML = `<div class="card result ${scoreClass(pct)}"><p class="eyebrow">${esc(title)}</p>
       <div class="score">${pct}%</div><p><b>${msg}</b></p><p class="hint">${s.right} of ${s.qs.length} correct</p>
       ${next ? `<p class="hint">Comes back for review ${next === addDays(today(), 1) ? 'tomorrow' : 'on ' + pretty(next)}.</p>` : ''}</div>
-    <a class="btn block" href="#/today">Back to today</a>
+    ${!id.startsWith('__') && pct < 80 ? `<a class="btn block ${pct < 60 ? '' : 'secondary'}" href="#/deep/${encodeURIComponent(id)}">Review it in depth</a>` : ''}
+    ${id.startsWith('__') && Object.keys(s.missed).length ? `<h2>Missed topics</h2>${Object.keys(s.missed).map(tid => topicRow(tid, { tag: `<span class="chip bad">${s.missed[tid].length} missed</span>` })).join('')}` : ''}
+    <a class="btn block ${!id.startsWith('__') && pct < 60 ? 'ghost' : ''}" href="#/today">Back to today</a>
     <button class="btn block ghost" id="retry">Retake quiz</button>`;
   document.getElementById('retry').onclick = () => { session = null; viewQuiz(id); };
 }
@@ -451,7 +530,20 @@ function quizResult(id, title) {
 function viewSettings() {
   const st = state.settings;
   const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const terms = [...new Set(content.courses.map(c => c.term || ''))];
+  const courseBox = c => {
+    const ids = content.topics.filter(t => t.course === c.id);
+    const done = ids.filter(t => tp(t.id).done).length;
+    return `<label class="course-pick"><input type="checkbox" value="${esc(c.id)}" ${st.courses.includes(c.id) ? 'checked' : ''}>
+      <span class="grow"><b>${esc(c.title)}</b><span class="hint">${c.missing ? "Couldn't load (offline?)" : `${ids.length} topics${done ? ` · ${done} done` : ''}`}</span></span></label>`;
+  };
   app.innerHTML = `<div class="page-head"><h1>Settings</h1></div>
+    <h2>Studying now</h2>
+    <div class="card">
+      <p class="hint">Pick the classes for this break. Today, the calendar and quizzes use only these. Progress on the others is kept.</p>
+      ${terms.map(term => `<div class="term-group">${term ? `<div class="term-row"><b class="grow">${esc(term)}</b>${terms.length > 1 ? `<button class="linkish" data-term="${esc(term)}">Only this semester</button>` : ''}</div>` : ''}
+        ${content.courses.filter(c => (c.term || '') === term).map(courseBox).join('')}</div>`).join('')}
+    </div>
     <h2>Break</h2>
     <div class="card">
       <div class="two">
@@ -472,14 +564,19 @@ function viewSettings() {
       <label class="btn block ghost">Import progress<input type="file" id="import" accept="application/json" hidden></label>
       <button class="btn block ghost danger" id="reset">Reset all progress</button>
     </div>
-    <p class="hint center">${esc(content.title)} · ${content.topics.length} topics</p>`;
+    <p class="hint center">${esc(content.title)} · ${content.courses.length} course${content.courses.length === 1 ? '' : 's'} · ${content.topics.length} topics</p>`;
+  app.querySelectorAll('[data-term]').forEach(b => b.onclick = () => {
+    app.querySelectorAll('.course-pick input').forEach(x => { x.checked = (courseById(x.value).term || '') === b.dataset.term; });
+  });
 
   document.getElementById('saveSettings').onclick = () => {
     const start = document.getElementById('start').value, end = document.getElementById('end').value;
     if (!start || !end || end < start) return alert('End date needs to be on or after the start date.');
     const offDays = [...app.querySelectorAll('.days input:checked')].map(x => Number(x.value));
     if (offDays.length === 7) return alert('Leave at least one study day.');
-    Object.assign(st, { start, end, offDays, finalReview: document.getElementById('final').checked });
+    const courses = [...app.querySelectorAll('.course-pick input:checked')].map(x => x.value);
+    if (!courses.length) return alert('Pick at least one class to study.');
+    Object.assign(st, { start, end, offDays, courses, finalReview: document.getElementById('final').checked });
     rebuildPlan(); save(); location.hash = '#/calendar';
   };
   document.getElementById('export').onclick = () => {
@@ -515,17 +612,33 @@ function route() {
   document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === (TAB_OF[view || 'today'] || '')));
   document.body.dataset.view = view || 'today';
   ({
-    today: viewToday, calendar: () => viewCalendar(id), plan: () => viewCalendar(), topics: viewTopics, settings: viewSettings,
-    topic: () => viewTopic(id), cards: () => viewCards(id), quiz: () => viewQuiz(id)
+    today: viewToday, calendar: () => viewCalendar(id), plan: () => viewCalendar(), topics: () => viewTopics(id), settings: viewSettings,
+    topic: () => viewTopic(id), deep: () => viewDeep(id), cards: () => viewCards(id), quiz: () => viewQuiz(id)
   }[view || 'today'] || viewToday)();
   window.scrollTo(0, 0);
 }
 
 /* ---------- boot ---------- */
+const getJSON = async url => { const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) throw new Error(r.status); return r.json(); };
+
+// content.json lists courses (each with a term), whose topics sit inline or in their own file.
+// An older content.json with just "topics" is one course. Topic ids become "<course>:<topic>".
+async function loadContent() {
+  const lib = await getJSON('content.json');
+  const list = lib.courses || [{ id: lib.id || 'main', title: lib.title || 'Topics', topics: lib.topics }];
+  const missing = [];
+  const loaded = await Promise.all(list.map(async c => {
+    if (c.topics || !c.file) return c.topics || [];
+    try { return (await getJSON(c.file)).topics || []; } catch (e) { missing.push(c.title); return null; }
+  }));
+  const courses = list.map(({ topics, ...c }, i) => ({ ...c, missing: !loaded[i] }));
+  const topics = list.flatMap((c, i) => (loaded[i] || []).map(t => ({ ...t, id: `${c.id}:${t.id}`, course: c.id })));
+  return { id: lib.id || 'main', title: lib.title || '', defaults: lib.defaults, courses, topics, missing };
+}
+
 async function boot() {
   try {
-    const res = await fetch('content.json', { cache: 'no-cache' });
-    content = await res.json();
+    content = await loadContent();
   } catch (e) {
     app.innerHTML = `<p>Couldn't load study content. Open the app once with internet so it can save a copy for offline use.</p>`;
     return;
