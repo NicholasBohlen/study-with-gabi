@@ -6,7 +6,7 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 
 | File | What it is |
 |---|---|
-| `index.html`, `app.js`, `styles.css` | The app |
+| `index.html`, `app.js`, `features.js`, `styles.css` | The app |
 | `content.json`, `courses/` | **The study material:** the list of classes, and one file of topics per class. |
 | `sw.js`, `manifest.webmanifest`, icons | Make it installable and work offline |
 | `slides/` | Drop source PowerPoints/PDFs here to turn into content.json. Never uploaded (listed in `.gitignore`). |
@@ -34,6 +34,13 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 - **Topics:** the classes she's studying now (or all of them, by semester), with progress per class and when each topic is planned or due for review.
 - **Each topic:** key points, then flashcards (cards she marks "Again" come back a few cards later), then a quiz with explanations.
 - **In depth:** for a topic she doesn't know yet, or scored under 80% on: the questions she missed with the right answers, the notes, every card laid out, and worked questions to check herself on. Linked from the topic page, the quiz score, and the end of the flashcards when she missed some.
+- **Stats:** day streak (days off don't break it), minutes studied each day, cards and questions done, quiz scores over time, and progress per class.
+- **Weak spots:** every question she's missed, until she gets it right twice in a row. On Today and Stats.
+- **Search:** the magnifier at the top searches cards, notes and questions in every class.
+- **Exams:** add exam dates in Settings. That class's topics get planned before the exam, Today counts down, and three days out it switches to exam prep.
+- **Practice exam:** timed, no answers until the end, flag and jump between questions, then a breakdown by topic and everything missed.
+- **Her own cards:** "Write a card" at the bottom of any topic. They join that topic's flashcards and are in the progress backup.
+- **First run:** a new person picks their classes, dates and days off (and can add the app to the home screen) before anything else. Share it from Settings > Share.
 - **Spacing:** the quiz score decides when a topic comes back. Under 60% returns the next day, 60 to 79% in 3 days, and 80% or higher in 7 days.
 - **Last study day:** a mixed final quiz across everything, weighted toward her weakest topics. This can be turned off in Settings.
 - **Missed days:** unfinished topics show as "Carried over." **Save and rebuild plan** in Settings spreads them over the days left.
@@ -73,7 +80,7 @@ Content is a library of classes. `content.json` lists them, and each class's top
       "source": "Lectures 3-4",
       "points": ["Key point", "Key point"],
       "notes": [{ "heading": "Section", "text": "Longer explanation.\n\n- A bullet\n- Another bullet" }],
-      "cards": [{ "front": "Question", "back": "Answer" }],
+      "cards": [{ "front": "Question", "back": "Answer", "frontImg": "img/optional.png" }],
       "questions": [{
         "q": "Question stem",
         "options": ["A", "B", "C", "D"],
@@ -85,7 +92,7 @@ Content is a library of classes. `content.json` lists them, and each class's top
 }
 ```
 
-`answer` is the position of the correct option, counting from 0. The app shuffles the options. Topics go on the plan in the order they're listed. `notes` is optional: the fuller explanation shown on the in-depth page (a blank line starts a new paragraph, lines starting "- " are bullets).
+`answer` is the position of the correct option, counting from 0. The app shuffles the options. Topics go on the plan in the order they're listed. Pictures are optional: `frontImg` / `backImg` on a card, `img` on a question or a note, as a path to a file in the repo (for example `img/ecg-afib.png`). Pictures in the classes she's studying are saved for offline use. `notes` is optional: the fuller explanation shown on the in-depth page (a blank line starts a new paragraph, lines starting "- " are bullets).
 
 ## Progress and backup
 

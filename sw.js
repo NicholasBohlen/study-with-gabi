@@ -1,9 +1,9 @@
 // Offline support. Network first (always asking the server, never the browser's
 // HTTP cache, so files from two versions never mix), the saved copy when there's
 // no signal or the network takes too long.
-const CACHE = 'study-with-gabi-v4';
+const CACHE = 'study-with-gabi-v5';
 const SHELL = [
-  './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
+  './', './index.html', './app.js', './features.js', './styles.css', './manifest.webmanifest',
   './content.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'
 ];
 
@@ -37,4 +37,15 @@ self.addEventListener('fetch', e => {
     const slow = new Promise(r => setTimeout(() => r(cached), 4000));
     return Promise.race([net.catch(() => cached), slow]);
   })());
+});
+
+// The app sends the pictures in the classes she's studying, so they work offline too.
+self.addEventListener('message', e => {
+  if (e.data?.type !== 'precache') return;
+  e.waitUntil(caches.open(CACHE).then(async cache => {
+    for (const url of e.data.urls) {
+      if (await cache.match(url)) continue;
+      try { const res = await fetch(url, { cache: 'no-cache' }); if (res.ok) await cache.put(url, res); } catch (err) { /* offline: next time */ }
+    }
+  }));
 });

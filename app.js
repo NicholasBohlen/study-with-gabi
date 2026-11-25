@@ -54,8 +54,11 @@ function loadState() {
     state = saved;
   } else {
     // New content set (new semester) or first launch: start fresh.
-    state = { contentId: content.id, settings: defaultSettings(), plan: {}, topics: {} };
+    state = { contentId: content.id, settings: defaultSettings(), plan: {}, topics: {}, onboarded: false };
   }
+  // Fields added later; saved progress from before them gets empty ones.
+  state.log ||= {}; state.history ||= []; state.qstats ||= {}; state.mycards ||= {};
+  state.settings.exams ||= [];
   state.settings.courses = (state.settings.courses || []).filter(courseById);
   if (!state.settings.courses.length) state.settings.courses = defaultCourses();
   // Make sure the plan holds exactly the topics she's studying (handles topics added mid-break).
@@ -89,8 +92,13 @@ function rebuildPlan() {
   const from = today() > state.settings.start ? today() : state.settings.start;
   let days = studyDays().filter(d => d >= from && d !== fd);
   if (!days.length) days = [from];
+  // A class with an exam coming goes first, and each of its topics lands before the exam.
+  const dl = t => examDeadline(t) || '9999';
+  todo.sort((a, b) => dl(a) < dl(b) ? -1 : dl(a) > dl(b) ? 1 : 0);
   todo.forEach((t, i) => {
-    const d = days[Math.floor(i * days.length / todo.length)];
+    let d = days[Math.floor(i * days.length / todo.length)];
+    const lim = examDeadline(t);
+    if (lim && d > lim) d = days.filter(x => x <= lim).pop() || from;
     (plan[d] ||= []).push(t.id);
   });
   state.plan = plan;
@@ -162,7 +170,7 @@ function topicRow(id, { tag = '', review = false } = {}) {
     <span class="grow">
       <span class="t-title">${esc(t.title)}</span>
       <span class="t-meta">${t.block ? `<span class="block-name">${esc(t.block)}</span>` : ''}${tag}
-        <span>${t.cards?.length || 0} cards · ${t.questions?.length || 0} questions</span></span>
+        <span>${allCards(id).length} cards · ${t.questions?.length || 0} questions</span></span>
     </span>${right}</a>`;
 }
 
@@ -177,13 +185,13 @@ function dayInfo(d) {
     const p = tp(id);
     return { color: blockColor(topicById(id).block), cls: p.done ? 'done' : d < t ? 'missed' : 'todo' };
   });
-  return { inBreak, off, ids, dots, final: d === finalDay(), reviews: d >= t ? reviewsOn(d) : [] };
+  return { inBreak, off, ids, dots, final: d === finalDay(), reviews: d >= t ? reviewsOn(d) : [], exams: st.exams.filter(e => e.date === d) };
 }
 
 function dotsHtml(info, max = 4) {
   const dots = info.dots.slice(0, max).map(x => `<i class="dot ${x.cls}" style="--c:${x.color}"></i>`).join('');
   const more = info.dots.length > max ? `<i class="more">+${info.dots.length - max}</i>` : '';
-  const extra = (info.final ? '<i class="dot star">★</i>' : '') + (info.reviews.length && !info.dots.length ? '<i class="dot review"></i>' : '');
+  const extra = (info.exams.length ? '<i class="dot exam">E</i>' : '') + (info.final ? '<i class="dot star">★</i>' : '') + (info.reviews.length && !info.dots.length ? '<i class="dot review"></i>' : '');
   return `<span class="dots">${dots}${more}${extra}</span>`;
 }
 
@@ -204,7 +212,8 @@ function weekStrip() {
 
 function greeting() {
   const h = new Date().getHours();
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const name = state.settings.name;
+  return (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (name ? `, ${esc(name)}` : '');
 }
 
 function viewToday() {
@@ -220,11 +229,12 @@ function viewToday() {
     : today() > state.settings.end ? 'Break is over. Nice work.' : 'Day off. Rest up.';
 
   let h = `<section class="hero">
-      <div class="grow"><p class="eyebrow">${longDay(today())}</p><h1>${greeting()}</h1><p class="hero-sub">${status}</p>
+      <div class="grow"><p class="eyebrow">${longDay(today())}</p><h1>${greeting()}</h1><p class="hero-sub">${status}</p>${streak() ? `<span class="streak-chip">🔥 ${streak()}-day streak</span>` : ''}
         <p class="hero-courses">${state.settings.courses.map(id => esc(courseById(id)?.title)).join(' · ')}</p></div>
       ${ring(pct, `${doneCount}/${total}`)}
     </section>
-    ${weekStrip()}`;
+    ${weekStrip()}
+    ${todayExtras()}`;
 
   if (preview && fresh.length) h += `<div class="note">Head start: here's day 1 if you want to get going early.</div>`;
 
@@ -271,7 +281,7 @@ function viewCalendar(sel) {
     <div class="card cal">
       <div class="cal-nav"><a href="#/calendar/${prev}" aria-label="Previous month">‹</a><b>${monthName}</b><a href="#/calendar/${next}" aria-label="Next month">›</a></div>
       <div class="cal-grid">${grid}</div>
-      <div class="legend"><span><i class="dot todo" style="--c:var(--muted)"></i>Planned</span><span><i class="dot done" style="--c:var(--muted)"></i>Done</span><span><i class="dot missed" style="--c:var(--muted)"></i>Behind</span><span><i class="dot review"></i>Review</span><span><i class="dot star">★</i>Final</span></div>
+      <div class="legend"><span><i class="dot todo" style="--c:var(--muted)"></i>Planned</span><span><i class="dot done" style="--c:var(--muted)"></i>Done</span><span><i class="dot missed" style="--c:var(--muted)"></i>Behind</span><span><i class="dot review"></i>Review</span><span><i class="dot star">★</i>Final</span><span><i class="dot exam">E</i>Exam</span></div>
     </div>`;
 
   // The picked day's agenda
@@ -280,10 +290,11 @@ function viewCalendar(sel) {
   const n = days.indexOf(sel);
   const label = !info.inBreak ? 'Outside the break' : info.off ? 'Day off' : `Study day ${n + 1} of ${days.length}`;
   h += `<h2 class="agenda-head">${sel === t ? 'Today · ' : ''}${longDay(sel)}</h2><p class="hint">${label}</p>`;
+  h += info.exams.map(e => `<a class="card exam-card row" href="#/practice/${encodeURIComponent(e.course)}"><span class="grow"><b>${examLabel(e)}</b><span class="hint">Exam day · tap for a timed practice</span></span><span class="chev">›</span></a>`).join('');
   if (info.ids.length) h += info.ids.map(id => topicRow(id, { tag: !tp(id).done && sel < t ? '<span class="chip warn">Behind</span>' : '' })).join('');
   if (info.reviews.length) h += `<h3>Reviews due</h3>` + info.reviews.map(id => topicRow(id, { review: true, tag: `<span class="chip ${scoreClass(tp(id).lastScore)}">Last ${tp(id).lastScore}%</span>` })).join('');
   if (info.final) h += `<a class="card feature row" href="#/quiz/__final"><span class="grow"><b>★ Final mixed review</b><br><span class="hint">Everything, weighted toward weak spots</span></span><span class="chev">›</span></a>`;
-  if (!info.ids.length && !info.reviews.length && !info.final) h += `<div class="card empty small-empty"><p class="hint">Nothing planned.</p></div>`;
+  if (!info.ids.length && !info.reviews.length && !info.final && !info.exams.length) h += `<div class="card empty small-empty"><p class="hint">Nothing planned.</p></div>`;
   app.innerHTML = h;
 }
 
@@ -320,6 +331,7 @@ function viewTopic(id) {
   if (!t) return notFound();
   const p = tp(id);
   const color = blockColor(t.block);
+  const cards = allCards(id);
   app.innerHTML = `${backLink('#/today')}
     <div class="topic-head" style="--c:${color}">
       <p class="eyebrow">${t.block ? esc(t.block) : ''}${t.source ? ` · ${esc(t.source)}` : ''}</p>
@@ -330,12 +342,14 @@ function viewTopic(id) {
     ${p.done && (p.lastScore ?? 100) < 80 ? `<a class="card deep-cta warn" href="#/deep/${encodeURIComponent(id)}"><span class="grow"><b>You scored ${p.lastScore}% last time</b><span class="hint">Go over it in depth: what you missed, full notes, worked questions</span></span><span class="chev">›</span></a>` : ''}
     <div class="steps">
       ${!p.done ? `<a class="step" href="#/deep/${encodeURIComponent(id)}"><span class="step-n alt">?</span><span class="grow"><b>Don't know this yet?</b><span class="hint">Start with the in-depth review</span></span><span class="chev">›</span></a>` : ''}
-      ${t.cards?.length ? `<a class="step" href="#/cards/${encodeURIComponent(id)}"><span class="step-n">1</span><span class="grow"><b>Flashcards</b><span class="hint">${t.cards.length} cards</span></span><span class="chev">›</span></a>` : ''}
-      ${t.questions?.length ? `<a class="step" href="#/quiz/${encodeURIComponent(id)}"><span class="step-n">${t.cards?.length ? 2 : 1}</span><span class="grow"><b>Quiz</b><span class="hint">${t.questions.length} questions · sets the next review</span></span><span class="chev">›</span></a>` : ''}
+      ${cards.length ? `<a class="step" href="#/cards/${encodeURIComponent(id)}"><span class="step-n">1</span><span class="grow"><b>Flashcards</b><span class="hint">${cards.length} cards${cards.some(c => c.mine) ? ` (${cards.filter(c => c.mine).length} yours)` : ''}</span></span><span class="chev">›</span></a>` : ''}
+      ${t.questions?.length ? `<a class="step" href="#/quiz/${encodeURIComponent(id)}"><span class="step-n">${cards.length ? 2 : 1}</span><span class="grow"><b>Quiz</b><span class="hint">${t.questions.length} questions · sets the next review</span></span><span class="chev">›</span></a>` : ''}
       ${p.done ? `<a class="step" href="#/deep/${encodeURIComponent(id)}"><span class="step-n alt">≡</span><span class="grow"><b>In depth</b><span class="hint">Notes, every card and worked questions</span></span><span class="chev">›</span></a>` : ''}
     </div>
-    ${!t.questions?.length && !p.done ? `<button class="btn block ghost" id="markdone">Mark done</button>` : ''}`;
+    ${!t.questions?.length && !p.done ? `<button class="btn block ghost" id="markdone">Mark done</button>` : ''}
+    ${myCardsSection(id)}`;
   wireBack();
+  wireMyCards(id, () => viewTopic(id));
   document.getElementById('markdone')?.addEventListener('click', () => {
     Object.assign(p, { done: true, completedOn: p.completedOn || today() }); scheduleReview(id, 80); save(); location.hash = '#/today';
   });
@@ -360,13 +374,14 @@ function viewDeep(id) {
   const answer = q => q.options[q.answer];
   const sections = [];
   if (missed.length) sections.push(['missed', `What you missed (${missed.length})`, missed.map(q => `<div class="card worked miss">
-      <p class="wq">${esc(q.q)}</p><p class="wa">✓ ${esc(answer(q))}</p>${q.explanation ? `<p class="hint">${esc(q.explanation)}</p>` : ''}</div>`).join('')]);
-  if (t.notes?.length) sections.push(['notes', 'Notes', t.notes.map(n => `<div class="card notes">${n.heading ? `<h3 class="card-title">${esc(n.heading)}</h3>` : ''}${richText(n.text)}</div>`).join('')]);
+      <p class="wq">${esc(q.q)}</p>${pic(q.img)}<p class="wa">✓ ${esc(answer(q))}</p>${q.explanation ? `<p class="hint">${esc(q.explanation)}</p>` : ''}</div>`).join('')]);
+  if (t.notes?.length) sections.push(['notes', 'Notes', t.notes.map(n => `<div class="card notes">${n.heading ? `<h3 class="card-title">${esc(n.heading)}</h3>` : ''}${richText(n.text)}${pic(n.img)}</div>`).join('')]);
   if (t.points?.length) sections.push(['points', 'Key points', `<div class="card"><ul class="points">${t.points.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`]);
-  if (t.cards?.length) sections.push(['cards', `All cards (${t.cards.length})`, `<div class="card qa-list">${t.cards.map(c => `<div class="qa"><p class="q">${esc(c.front)}</p><p class="a">${esc(c.back)}</p></div>`).join('')}</div>`]);
+  const cards = allCards(id);
+  if (cards.length) sections.push(['cards', `All cards (${cards.length})`, `<div class="card qa-list">${cards.map(c => `<div class="qa"><p class="q">${c.mine ? '<span class="chip">Yours</span> ' : ''}${esc(c.front)}</p>${pic(c.frontImg)}<p class="a">${esc(c.back)}</p>${pic(c.backImg)}</div>`).join('')}</div>`]);
   const practice = qs.filter(q => !missed.includes(q));
   if (practice.length) sections.push(['practice', `Worked questions (${practice.length})`, `<p class="hint">Answer in your head, then tap to check.</p>` + practice.map(q => `<details class="card worked">
-      <summary>${esc(q.q)}</summary>
+      <summary>${esc(q.q)}</summary>${pic(q.img)}
       <ol class="wopts">${q.options.map((o, i) => `<li class="${i === q.answer ? 'right' : ''}">${esc(o)}</li>`).join('')}</ol>
       ${q.explanation ? `<p class="hint">${esc(q.explanation)}</p>` : ''}</details>`).join('')]);
 
@@ -379,7 +394,7 @@ function viewDeep(id) {
     ${sections.map(([k, title, body]) => `<h2 id="s-${k}">${esc(title)}</h2>${body}`).join('') || '<div class="card empty"><p class="hint">Nothing more on this topic yet.</p></div>'}
     <h2>Now test yourself</h2>
     <div class="two">
-      ${t.cards?.length ? `<a class="btn secondary" href="#/cards/${encodeURIComponent(id)}">Flashcards</a>` : ''}
+      ${cards.length ? `<a class="btn secondary" href="#/cards/${encodeURIComponent(id)}">Flashcards</a>` : ''}
       ${qs.length ? `<a class="btn" href="#/quiz/${encodeURIComponent(id)}">Take the quiz</a>` : ''}
     </div>`;
   wireBack();
@@ -391,7 +406,8 @@ function viewCards(id) {
   const t = topicById(id);
   if (!t) return notFound();
   if (!session || session.kind !== 'cards' || session.id !== id) {
-    session = { kind: 'cards', id, queue: shuffle(t.cards), total: t.cards.length, cleared: 0, again: 0 };
+    const cards = allCards(id);
+    session = { kind: 'cards', id, queue: shuffle(cards), total: cards.length, cleared: 0, again: 0 };
   }
   const s = session;
   if (!s.queue.length) {
@@ -409,8 +425,8 @@ function viewCards(id) {
     <div class="mini-progress"><div style="width:${Math.round(s.cleared / s.total * 100)}%"></div></div>
     <div class="flip-wrap" id="flip" role="button" tabindex="0" aria-label="Flip card">
       <div class="flip">
-        <div class="face front"><span class="side">Question</span><div>${esc(c.front)}</div><span class="tap">Tap to flip</span></div>
-        <div class="face back"><span class="side">Answer</span><div>${esc(c.back)}</div></div>
+        <div class="face front"><span class="side">${c.mine ? 'Your card' : 'Question'}</span><div>${esc(c.front)}</div>${pic(c.frontImg)}<span class="tap">Tap to flip</span></div>
+        <div class="face back"><span class="side">Answer</span><div>${esc(c.back)}</div>${pic(c.backImg)}</div>
       </div>
     </div>
     <div id="pre"><button class="btn block secondary" id="show">Show answer</button></div>
@@ -425,9 +441,9 @@ function viewCards(id) {
   card.onclick = flip;
   card.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } };
   document.getElementById('show').onclick = flip;
-  document.getElementById('yes').onclick = () => { s.queue.shift(); s.cleared++; viewCards(id); };
+  document.getElementById('yes').onclick = () => { s.queue.shift(); s.cleared++; dayLog().cards++; save(); viewCards(id); };
   document.getElementById('no').onclick = () => {
-    const card = s.queue.shift(); s.again++;
+    const card = s.queue.shift(); s.again++; dayLog().cards++; save();
     s.queue.splice(Math.min(3, s.queue.length), 0, card);   // comes back a few cards later
     viewCards(id);
   };
@@ -435,6 +451,7 @@ function viewCards(id) {
 
 /* ---------- quizzes ---------- */
 function buildQuestions(id) {
+  if (id === '__weak') return weakQuestions().slice(0, 20);
   if (id === '__final' || id === '__mixed') {
     const n = id === '__final' ? 25 : 10;
     // Weight toward weak topics: each question appears once, plus extra copies for low scorers.
@@ -452,7 +469,7 @@ function buildQuestions(id) {
 }
 
 function viewQuiz(id) {
-  const special = id === '__final' || id === '__mixed';
+  const special = id.startsWith('__');
   if (!special && !topicById(id)) return notFound();
   if (!session || session.kind !== 'quiz' || session.id !== id) {
     const qs = buildQuestions(id).map(q => {
@@ -462,8 +479,8 @@ function viewQuiz(id) {
     session = { kind: 'quiz', id, qs, i: 0, picked: null, right: 0, byTopic: {}, missed: {} };
   }
   const s = session;
-  const title = id === '__final' ? 'Final review' : id === '__mixed' ? 'Mixed quiz' : topicById(id).title;
-  if (!s.qs.length) { app.innerHTML = `${backLink('#/today')}<div class="card empty"><p>No questions yet.</p></div>`; wireBack(); return; }
+  const title = { __final: 'Final review', __mixed: 'Mixed quiz', __weak: 'Weak spots' }[id] || topicById(id).title;
+  if (!s.qs.length) { app.innerHTML = `${backLink('#/today')}<div class="card empty"><p>${id === '__weak' ? 'No weak spots. Everything you missed, you have since gotten right twice.' : 'No questions yet.'}</p></div>`; wireBack(); return; }
   if (s.i >= s.qs.length) return quizResult(id, title);
 
   const q = s.qs[s.i];
@@ -471,7 +488,7 @@ function viewQuiz(id) {
   app.innerHTML = `${backLink(special ? '#/today' : '#/topic/' + encodeURIComponent(id), title)}
     <div class="run-head"><span class="hint">Question ${s.i + 1} of ${s.qs.length}</span>${special ? `<span class="hint">${esc(topicById(q.topic).title)}</span>` : ''}</div>
     <div class="mini-progress"><div style="width:${Math.round(s.i / s.qs.length * 100)}%"></div></div>
-    <div class="card question">${esc(q.q)}</div>
+    <div class="card question">${esc(q.q)}${pic(q.img)}</div>
     ${q.options.map((o, i) => {
       let cls = 'opt';
       if (answered && i === q.answer) cls += ' correct';
@@ -487,6 +504,7 @@ function viewQuiz(id) {
     if (ok) s.right++;
     const bt = (s.byTopic[q.topic] ||= { r: 0, n: 0 }); bt.n++; if (ok) bt.r++;
     if (!ok) (s.missed[q.topic] ||= []).push(q.q);
+    recordAnswer(q.topic, q, ok); save();
     viewQuiz(id);
     document.getElementById('next')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
@@ -498,7 +516,8 @@ function quizResult(id, title) {
   const pct = Math.round(s.right / s.qs.length * 100);
   if (!s.recorded) {
     s.recorded = true;
-    if (id === '__final' || id === '__mixed') {
+    logQuiz('quiz', id, pct, s.qs.length);
+    if (id.startsWith('__')) {
       // Mixed quizzes nudge each topic's review timing based on how that topic went.
       for (const [tid, { r, n }] of Object.entries(s.byTopic)) {
         const p = tp(tid); const tpct = Math.round(r / n * 100);
@@ -544,8 +563,10 @@ function viewSettings() {
       ${terms.map(term => `<div class="term-group">${term ? `<div class="term-row"><b class="grow">${esc(term)}</b>${terms.length > 1 ? `<button class="linkish" data-term="${esc(term)}">Only this semester</button>` : ''}</div>` : ''}
         ${content.courses.filter(c => (c.term || '') === term).map(courseBox).join('')}</div>`).join('')}
     </div>
+    ${examsCard()}
     <h2>Break</h2>
     <div class="card">
+      <label class="field">Your name<input id="sName" class="text-in" value="${esc(st.name || '')}" placeholder="For the greeting"></label>
       <div class="two">
         <label class="field">Starts<input type="date" id="start" value="${st.start}"></label>
         <label class="field">Ends<input type="date" id="end" value="${st.end}"></label>
@@ -557,6 +578,8 @@ function viewSettings() {
       <button class="btn block" id="saveSettings">Save and rebuild plan</button>
       <p class="hint">Rebuilding keeps finished topics and spreads the rest over the days left.</p>
     </div>
+    ${installCard()}
+    ${shareCard()}
     <h2>Backup</h2>
     <div class="card">
       <p class="hint">Progress lives on this device only. Export a backup to move it to another phone or keep it safe.</p>
@@ -576,9 +599,10 @@ function viewSettings() {
     if (offDays.length === 7) return alert('Leave at least one study day.');
     const courses = [...app.querySelectorAll('.course-pick input:checked')].map(x => x.value);
     if (!courses.length) return alert('Pick at least one class to study.');
-    Object.assign(st, { start, end, offDays, courses, finalReview: document.getElementById('final').checked });
+    Object.assign(st, { start, end, offDays, courses, name: document.getElementById('sName').value.trim(), finalReview: document.getElementById('final').checked });
     rebuildPlan(); save(); location.hash = '#/calendar';
   };
+  wireExams(); wireShare(); wireInstall();
   document.getElementById('export').onclick = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -602,18 +626,21 @@ function viewSettings() {
 function notFound() { app.innerHTML = `<div class="card empty"><p>That page doesn't exist.</p><a class="btn" href="#/today">Go to today</a></div>`; }
 
 /* ---------- router ---------- */
-const TAB_OF = { today: 'today', calendar: 'calendar', plan: 'calendar', topics: 'topics', settings: 'settings' };
+const TAB_OF = { today: 'today', calendar: 'calendar', plan: 'calendar', topics: 'topics', stats: 'stats', practice: 'stats', exam: 'stats', settings: 'settings' };
 function route() {
   navDepth++;
   const [path] = location.hash.slice(2).split('?');
-  const [view, raw] = path.split('/');
+  let [view, raw] = path.split('/');
+  if (state.onboarded === false && view !== 'welcome') { history.replaceState(null, '', '#/welcome'); view = 'welcome'; }
   const id = raw ? decodeURIComponent(raw) : null;
   if (!['cards', 'quiz'].includes(view)) session = null;
+  document.querySelector('.search-btn')?.classList.toggle('active', view === 'search');
   document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === (TAB_OF[view || 'today'] || '')));
   document.body.dataset.view = view || 'today';
   ({
     today: viewToday, calendar: () => viewCalendar(id), plan: () => viewCalendar(), topics: () => viewTopics(id), settings: viewSettings,
-    topic: () => viewTopic(id), deep: () => viewDeep(id), cards: () => viewCards(id), quiz: () => viewQuiz(id)
+    topic: () => viewTopic(id), deep: () => viewDeep(id),
+    stats: viewStats, search: viewSearch, practice: () => viewPractice(id), exam: viewExam, welcome: viewWelcome, cards: () => viewCards(id), quiz: () => viewQuiz(id)
   }[view || 'today'] || viewToday)();
   window.scrollTo(0, 0);
 }
@@ -646,6 +673,7 @@ async function boot() {
   loadState();
   window.addEventListener('hashchange', route);
   route();
+  precacheImages();
 }
 
 const setOffline = () => { document.getElementById('offline').hidden = navigator.onLine; };
