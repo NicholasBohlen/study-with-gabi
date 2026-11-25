@@ -107,62 +107,207 @@ function scheduleReview(id, pct) {
   tp(id).nextReview = addDays(today(), gap);
 }
 
-/* ---------- views ---------- */
+/* ---------- shared bits for the views ---------- */
+const PALETTE = ['#3b7dd8', '#d9485f', '#1f9d74', '#d98a1c', '#7a5bd6', '#1a9bb5', '#c94f9a', '#6b9a2a'];
+function blockColor(block) {
+  const blocks = [...new Set(content.topics.map(t => t.block || 'Other'))];
+  return PALETTE[Math.max(0, blocks.indexOf(block || 'Other')) % PALETTE.length];
+}
+const scoreClass = s => s == null ? 'good' : s < 60 ? 'bad' : s < 80 ? 'warn' : 'good';
+const shortDay = s => parse(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const longDay = s => parse(s).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+const reviewsOn = d => content.topics.filter(t => tp(t.id).done && tp(t.id).nextReview === d).map(t => t.id);
+
+// Back link: goes back if we came from inside the app, otherwise to the fallback page.
+let navDepth = 0;
+const backLink = (fallback, label = 'Back') => `<a class="back" href="${fallback}" data-back>‹ ${esc(label)}</a>`;
+function wireBack() {
+  app.querySelector('[data-back]')?.addEventListener('click', e => { if (navDepth > 1) { e.preventDefault(); history.back(); } });
+}
+
+function ring(pct, label) {
+  const r = 30, c = 2 * Math.PI * r;
+  return `<div class="ring"><svg viewBox="0 0 72 72" aria-hidden="true">
+      <circle cx="36" cy="36" r="${r}" class="ring-bg"/>
+      <circle cx="36" cy="36" r="${r}" class="ring-fg" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/>
+    </svg><div class="ring-text"><b>${pct}%</b><span>${label}</span></div></div>`;
+}
+
+function topicRow(id, { tag = '', review = false } = {}) {
+  const t = topicById(id);
+  const p = tp(id);
+  const right = p.done && p.lastScore != null && !review
+    ? `<span class="chip ${scoreClass(p.lastScore)}">${p.lastScore}%</span>`
+    : p.done && !review ? `<span class="chip good">✓</span>` : `<span class="chev">›</span>`;
+  return `<a class="topic-row" style="--c:${blockColor(t.block)}" href="#/topic/${encodeURIComponent(id)}${review ? '?review=1' : ''}">
+    <span class="bar"></span>
+    <span class="grow">
+      <span class="t-title">${esc(t.title)}</span>
+      <span class="t-meta">${t.block ? `<span class="block-name">${esc(t.block)}</span>` : ''}${tag}
+        <span>${t.cards?.length || 0} cards · ${t.questions?.length || 0} questions</span></span>
+    </span>${right}</a>`;
+}
+
+// Status of one calendar day, shared by the week strip and the month grid.
+function dayInfo(d) {
+  const st = state.settings;
+  const inBreak = d >= st.start && d <= st.end;
+  const off = st.offDays.includes(parse(d).getDay());
+  const ids = (state.plan[d] || []).filter(topicById);
+  const t = today();
+  const dots = ids.map(id => {
+    const p = tp(id);
+    return { color: blockColor(topicById(id).block), cls: p.done ? 'done' : d < t ? 'missed' : 'todo' };
+  });
+  return { inBreak, off, ids, dots, final: d === finalDay(), reviews: d >= t ? reviewsOn(d) : [] };
+}
+
+function dotsHtml(info, max = 4) {
+  const dots = info.dots.slice(0, max).map(x => `<i class="dot ${x.cls}" style="--c:${x.color}"></i>`).join('');
+  const more = info.dots.length > max ? `<i class="more">+${info.dots.length - max}</i>` : '';
+  const extra = (info.final ? '<i class="dot star">★</i>' : '') + (info.reviews.length && !info.dots.length ? '<i class="dot review"></i>' : '');
+  return `<span class="dots">${dots}${more}${extra}</span>`;
+}
+
+/* ---------- today ---------- */
+function weekStrip() {
+  const t = today();
+  const start = addDays(t, -parse(t).getDay());
+  let h = '<div class="week">';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i);
+    const info = dayInfo(d);
+    h += `<a href="#/calendar/${d}" class="wd ${d === t ? 'is-today' : ''} ${!info.inBreak || info.off ? 'is-off' : ''}">
+      <span class="wd-name">${parse(d).toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
+      <span class="wd-num">${parse(d).getDate()}</span>${dotsHtml(info, 3)}</a>`;
+  }
+  return h + '</div>';
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
 function viewToday() {
   const { fresh, reviews, preview } = dueToday();
   const total = content.topics.length;
   const doneCount = content.topics.filter(t => tp(t.id).done).length;
+  const pct = total ? Math.round(doneCount / total * 100) : 0;
   const days = studyDays();
   const idx = days.indexOf(today());
   const fd = finalDay();
-  let h = `<h1>${pretty(today())}</h1>
-    <p class="muted">${idx >= 0 ? `Study day ${idx + 1} of ${days.length}` : preview ? `Break starts ${pretty(days[0] || state.settings.start)}` : today() > state.settings.end ? 'Break is over. Nice work.' : 'Day off'}</p>
-    <div class="progress"><div style="width:${total ? Math.round(doneCount / total * 100) : 0}%"></div></div>
-    <p class="small muted">${doneCount} of ${total} topics done</p>`;
+  const status = idx >= 0 ? `Study day ${idx + 1} of ${days.length}`
+    : preview ? `Break starts ${pretty(days[0] || state.settings.start)}`
+    : today() > state.settings.end ? 'Break is over. Nice work.' : 'Day off. Rest up.';
 
-  if (preview && fresh.length) h += `<div class="card"><b>Head start.</b> <span class="muted">Here's day 1 if you want to get going early.</span></div>`;
+  let h = `<section class="hero">
+      <div class="grow"><p class="eyebrow">${longDay(today())}</p><h1>${greeting()}</h1><p class="hero-sub">${status}</p></div>
+      ${ring(pct, `${doneCount}/${total}`)}
+    </section>
+    ${weekStrip()}`;
+
+  if (preview && fresh.length) h += `<div class="note">Head start: here's day 1 if you want to get going early.</div>`;
 
   if (fresh.length) {
-    h += `<h2>Today's topics</h2>`;
-    h += fresh.map(({ id, carried }) => topicRow(id, carried ? '<span class="tag warn">Carried over</span>' : '')).join('');
+    h += `<h2>Today's topics <span class="count">${fresh.length}</span></h2>`;
+    h += fresh.map(({ id, carried }) => topicRow(id, { tag: carried ? '<span class="chip warn">Carried over</span>' : '' })).join('');
   }
   if (reviews.length) {
-    h += `<h2>Review</h2><p class="small muted">Topics due for another look, weakest first.</p>`;
-    h += reviews.map(id => topicRow(id, `<span class="tag ${tp(id).lastScore < 60 ? 'bad' : 'warn'}">Last: ${tp(id).lastScore}%</span>`, true)).join('');
+    h += `<h2>Review <span class="count">${reviews.length}</span></h2><p class="hint">Due for another look, weakest first.</p>`;
+    h += reviews.map(id => topicRow(id, { review: true, tag: `<span class="chip ${scoreClass(tp(id).lastScore)}">Last ${tp(id).lastScore}%</span>` })).join('');
   }
   if (fd === today() || (today() > (fd || '9999') && doneCount === total)) {
-    h += `<h2>Final review</h2><div class="card"><p>Mixed quiz across everything, weighted toward topics you scored lowest on.</p>
+    h += `<h2>Final review</h2><div class="card feature"><p>A mixed quiz across everything, weighted toward the topics you scored lowest on.</p>
       <a class="btn block" href="#/quiz/__final">Start final review</a></div>`;
   }
   if (!fresh.length && !reviews.length && fd !== today()) {
-    h += `<div class="card center"><p class="big">✓</p><p>Nothing due today.</p>
-      <a class="btn secondary" href="#/quiz/__mixed">Quick mixed quiz</a></div>`;
+    h += `<div class="card empty"><div class="empty-icon">✓</div><p><b>Nothing due today.</b></p>
+      <p class="hint">Want to keep it fresh?</p><a class="btn secondary" href="#/quiz/__mixed">Quick mixed quiz</a></div>`;
   }
   app.innerHTML = h;
 }
 
-function topicRow(id, extra = '', review = false) {
-  const t = topicById(id);
-  return `<a class="card row" href="#/topic/${encodeURIComponent(id)}${review ? '?review=1' : ''}">
-    <div class="grow"><div><b>${esc(t.title)}</b></div>
-      <div class="small muted">${t.block ? `<span class="tag">${esc(t.block)}</span>` : ''}${extra}
-      ${t.cards?.length || 0} cards · ${t.questions?.length || 0} questions</div></div>
-    <span class="muted">›</span></a>`;
+/* ---------- calendar ---------- */
+function viewCalendar(sel) {
+  const t = today();
+  if (!sel || !/^\d{4}-\d{2}-\d{2}$/.test(sel)) sel = t < state.settings.start ? state.settings.start : t;
+  const sd = parse(sel);
+  const first = new Date(sd.getFullYear(), sd.getMonth(), 1);
+  const prev = iso(new Date(sd.getFullYear(), sd.getMonth() - 1, 1));
+  const next = iso(new Date(sd.getFullYear(), sd.getMonth() + 1, 1));
+  const monthName = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const names = [0, 1, 2, 3, 4, 5, 6].map(i => new Date(2026, 1, i + 1).toLocaleDateString(undefined, { weekday: 'narrow' })); // Feb 1 2026 is a Sunday
+
+  let grid = names.map(n => `<span class="cal-head">${n}</span>`).join('');
+  for (let i = 0; i < first.getDay(); i++) grid += '<span></span>';
+  for (let d = iso(first); parse(d).getMonth() === first.getMonth(); d = addDays(d, 1)) {
+    const info = dayInfo(d);
+    const cls = ['cal-day', d === t && 'is-today', d === sel && 'is-sel', (!info.inBreak || info.off) && 'is-off'].filter(Boolean).join(' ');
+    grid += `<a href="#/calendar/${d}" class="${cls}"><span class="num">${parse(d).getDate()}</span>${dotsHtml(info, 3)}</a>`;
+  }
+
+  const done = content.topics.filter(x => tp(x.id).done).length;
+  let h = `<div class="page-head"><h1>Calendar</h1><p class="hint">${shortDay(state.settings.start)} to ${shortDay(state.settings.end)} · ${content.topics.length} topics over ${studyDays().length} study days · ${done} done</p></div>
+    <div class="card cal">
+      <div class="cal-nav"><a href="#/calendar/${prev}" aria-label="Previous month">‹</a><b>${monthName}</b><a href="#/calendar/${next}" aria-label="Next month">›</a></div>
+      <div class="cal-grid">${grid}</div>
+      <div class="legend"><span><i class="dot todo" style="--c:var(--muted)"></i>Planned</span><span><i class="dot done" style="--c:var(--muted)"></i>Done</span><span><i class="dot missed" style="--c:var(--muted)"></i>Behind</span><span><i class="dot review"></i>Review</span><span><i class="dot star">★</i>Final</span></div>
+    </div>`;
+
+  // The picked day's agenda
+  const info = dayInfo(sel);
+  const days = studyDays();
+  const n = days.indexOf(sel);
+  const label = !info.inBreak ? 'Outside the break' : info.off ? 'Day off' : `Study day ${n + 1} of ${days.length}`;
+  h += `<h2 class="agenda-head">${sel === t ? 'Today · ' : ''}${longDay(sel)}</h2><p class="hint">${label}</p>`;
+  if (info.ids.length) h += info.ids.map(id => topicRow(id, { tag: !tp(id).done && sel < t ? '<span class="chip warn">Behind</span>' : '' })).join('');
+  if (info.reviews.length) h += `<h3>Reviews due</h3>` + info.reviews.map(id => topicRow(id, { review: true, tag: `<span class="chip ${scoreClass(tp(id).lastScore)}">Last ${tp(id).lastScore}%</span>` })).join('');
+  if (info.final) h += `<a class="card feature row" href="#/quiz/__final"><span class="grow"><b>★ Final mixed review</b><br><span class="hint">Everything, weighted toward weak spots</span></span><span class="chev">›</span></a>`;
+  if (!info.ids.length && !info.reviews.length && !info.final) h += `<div class="card empty small-empty"><p class="hint">Nothing planned.</p></div>`;
+  app.innerHTML = h;
 }
 
+/* ---------- topics (all, by block) ---------- */
+function viewTopics() {
+  const groups = {};
+  for (const t of content.topics) (groups[t.block || 'Other'] ||= []).push(t.id);
+  let h = `<div class="page-head"><h1>Topics</h1><p class="hint">Everything in this set, grouped by block.</p></div>`;
+  for (const [block, ids] of Object.entries(groups)) {
+    const done = ids.filter(id => tp(id).done).length;
+    h += `<div class="block-head" style="--c:${blockColor(block)}"><span class="swatch"></span><b class="grow">${esc(block)}</b>
+      <span class="hint">${done}/${ids.length}</span></div>
+      <div class="mini-progress" style="--c:${blockColor(block)}"><div style="width:${Math.round(done / ids.length * 100)}%"></div></div>`;
+    h += ids.map(id => {
+      const d = plannedDate(id);
+      const p = tp(id);
+      const when = p.done ? (p.nextReview ? `Review ${p.nextReview <= today() ? 'due' : shortDay(p.nextReview)}` : '') : d ? `Planned ${shortDay(d)}` : '';
+      return topicRow(id, { tag: when ? `<span>${when}</span> · ` : '' });
+    }).join('');
+  }
+  h += `<a class="btn block secondary" href="#/quiz/__mixed">Quick mixed quiz</a>`;
+  app.innerHTML = h;
+}
+
+/* ---------- one topic ---------- */
 function viewTopic(id) {
   const t = topicById(id);
   if (!t) return notFound();
   const p = tp(id);
-  app.innerHTML = `<a href="#/today" class="small">‹ Today</a>
-    <h1>${esc(t.title)}</h1>
-    <p class="small muted">${t.block ? `<span class="tag">${esc(t.block)}</span>` : ''}${t.source ? esc(t.source) : ''}</p>
-    ${p.done ? `<p><span class="tag good">Done</span> <span class="small muted">Best ${p.bestScore}% · last ${p.lastScore}%</span></p>` : ''}
-    ${t.points?.length ? `<div class="card"><b>Key points</b><ul class="points">${t.points.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
-    <p class="small muted">Read the key points, run the flashcards, then take the quiz. The quiz score decides when this topic comes back for review.</p>
-    <a class="btn block" href="#/cards/${encodeURIComponent(id)}" ${t.cards?.length ? '' : 'hidden'}>1. Flashcards (${t.cards?.length || 0})</a>
-    <a class="btn block secondary" href="#/quiz/${encodeURIComponent(id)}" ${t.questions?.length ? '' : 'hidden'}>2. Quiz (${t.questions?.length || 0})</a>
+  const color = blockColor(t.block);
+  app.innerHTML = `${backLink('#/today')}
+    <div class="topic-head" style="--c:${color}">
+      <p class="eyebrow">${t.block ? esc(t.block) : ''}${t.source ? ` · ${esc(t.source)}` : ''}</p>
+      <h1>${esc(t.title)}</h1>
+      ${p.done ? `<p><span class="chip good">Done</span> <span class="hint">Best ${p.bestScore ?? '–'}% · last ${p.lastScore ?? '–'}%${p.nextReview ? ` · review ${p.nextReview <= today() ? 'due now' : shortDay(p.nextReview)}` : ''}</span></p>` : ''}
+    </div>
+    ${t.points?.length ? `<div class="card"><h3 class="card-title">Key points</h3><ul class="points">${t.points.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+    <div class="steps">
+      ${t.cards?.length ? `<a class="step" href="#/cards/${encodeURIComponent(id)}"><span class="step-n">1</span><span class="grow"><b>Flashcards</b><span class="hint">${t.cards.length} cards</span></span><span class="chev">›</span></a>` : ''}
+      ${t.questions?.length ? `<a class="step" href="#/quiz/${encodeURIComponent(id)}"><span class="step-n">${t.cards?.length ? 2 : 1}</span><span class="grow"><b>Quiz</b><span class="hint">${t.questions.length} questions · sets the next review</span></span><span class="chev">›</span></a>` : ''}
+    </div>
     ${!t.questions?.length && !p.done ? `<button class="btn block ghost" id="markdone">Mark done</button>` : ''}`;
+  wireBack();
   document.getElementById('markdone')?.addEventListener('click', () => {
     Object.assign(p, { done: true, completedOn: p.completedOn || today() }); scheduleReview(id, 80); save(); location.hash = '#/today';
   });
@@ -173,36 +318,45 @@ function viewCards(id) {
   const t = topicById(id);
   if (!t) return notFound();
   if (!session || session.kind !== 'cards' || session.id !== id) {
-    session = { kind: 'cards', id, queue: shuffle(t.cards), flipped: false, seen: 0, again: 0 };
+    session = { kind: 'cards', id, queue: shuffle(t.cards), total: t.cards.length, cleared: 0, again: 0 };
   }
   const s = session;
   if (!s.queue.length) {
-    app.innerHTML = `<h1>Cards done</h1>
-      <p class="muted">${s.again ? `You missed ${s.again} along the way and went back over them.` : 'Clean run.'}</p>
+    app.innerHTML = `<div class="card empty"><div class="empty-icon">✓</div><h1>Cards done</h1>
+      <p class="hint">${s.again ? `You missed ${s.again} along the way and went back over them.` : 'Clean run.'}</p></div>
       <a class="btn block" href="#/quiz/${encodeURIComponent(id)}">Take the quiz</a>
       <button class="btn block ghost" id="again">Run cards again</button>`;
     document.getElementById('again').onclick = () => { session = null; viewCards(id); };
     return;
   }
   const c = s.queue[0];
-  app.innerHTML = `<a href="#/topic/${encodeURIComponent(id)}" class="small">‹ ${esc(t.title)}</a>
-    <p class="small muted">${s.queue.length} left</p>
-    <div class="card flash ${s.flipped ? 'back' : ''}" id="flip">
-      <div class="side">${s.flipped ? 'Answer' : 'Tap to flip'}</div>
-      <div>${esc(s.flipped ? c.back : c.front)}</div>
+  app.innerHTML = `${backLink('#/topic/' + encodeURIComponent(id), t.title)}
+    <div class="run-head"><span class="hint">${s.cleared} of ${s.total} cleared</span><span class="hint">${s.queue.length} left</span></div>
+    <div class="mini-progress"><div style="width:${Math.round(s.cleared / s.total * 100)}%"></div></div>
+    <div class="flip-wrap" id="flip" role="button" tabindex="0" aria-label="Flip card">
+      <div class="flip">
+        <div class="face front"><span class="side">Question</span><div>${esc(c.front)}</div><span class="tap">Tap to flip</span></div>
+        <div class="face back"><span class="side">Answer</span><div>${esc(c.back)}</div></div>
+      </div>
     </div>
-    ${s.flipped
-      ? `<div class="two"><button class="btn bad" id="no">Again</button><button class="btn good" id="yes">Got it</button></div>`
-      : `<button class="btn block secondary" id="show">Show answer</button>`}`;
-  const flip = () => { s.flipped = !s.flipped; viewCards(id); };
-  document.getElementById('flip').onclick = flip;
-  document.getElementById('show')?.addEventListener('click', flip);
-  document.getElementById('yes')?.addEventListener('click', () => { s.queue.shift(); s.flipped = false; viewCards(id); });
-  document.getElementById('no')?.addEventListener('click', () => {
+    <div id="pre"><button class="btn block secondary" id="show">Show answer</button></div>
+    <div class="two" id="post" hidden><button class="btn bad" id="no">Again</button><button class="btn good" id="yes">Got it</button></div>`;
+  wireBack();
+  const card = document.getElementById('flip');
+  const flip = () => {
+    const on = card.classList.toggle('flipped');
+    document.getElementById('pre').hidden = on;
+    document.getElementById('post').hidden = !on;
+  };
+  card.onclick = flip;
+  card.onkeydown = e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } };
+  document.getElementById('show').onclick = flip;
+  document.getElementById('yes').onclick = () => { s.queue.shift(); s.cleared++; viewCards(id); };
+  document.getElementById('no').onclick = () => {
     const card = s.queue.shift(); s.again++;
     s.queue.splice(Math.min(3, s.queue.length), 0, card);   // comes back a few cards later
-    s.flipped = false; viewCards(id);
-  });
+    viewCards(id);
+  };
 }
 
 /* ---------- quizzes ---------- */
@@ -235,28 +389,31 @@ function viewQuiz(id) {
   }
   const s = session;
   const title = id === '__final' ? 'Final review' : id === '__mixed' ? 'Mixed quiz' : topicById(id).title;
-  if (!s.qs.length) { app.innerHTML = `<p>No questions yet.</p>`; return; }
+  if (!s.qs.length) { app.innerHTML = `${backLink('#/today')}<div class="card empty"><p>No questions yet.</p></div>`; wireBack(); return; }
   if (s.i >= s.qs.length) return quizResult(id, title);
 
   const q = s.qs[s.i];
   const answered = s.picked !== null;
-  app.innerHTML = `<a href="${special ? '#/today' : '#/topic/' + encodeURIComponent(id)}" class="small">‹ ${esc(title)}</a>
-    <p class="small muted">Question ${s.i + 1} of ${s.qs.length}${special ? ` · ${esc(topicById(q.topic).title)}` : ''}</p>
-    <div class="card"><b>${esc(q.q)}</b></div>
+  app.innerHTML = `${backLink(special ? '#/today' : '#/topic/' + encodeURIComponent(id), title)}
+    <div class="run-head"><span class="hint">Question ${s.i + 1} of ${s.qs.length}</span>${special ? `<span class="hint">${esc(topicById(q.topic).title)}</span>` : ''}</div>
+    <div class="mini-progress"><div style="width:${Math.round(s.i / s.qs.length * 100)}%"></div></div>
+    <div class="card question">${esc(q.q)}</div>
     ${q.options.map((o, i) => {
       let cls = 'opt';
       if (answered && i === q.answer) cls += ' correct';
       else if (answered && i === s.picked) cls += ' wrong';
-      return `<button class="${cls}" data-i="${i}" ${answered ? 'disabled' : ''}>${esc(o)}</button>`;
+      return `<button class="${cls}" data-i="${i}" ${answered ? 'disabled' : ''}><span class="letter">${'ABCDEFGH'[i]}</span><span>${esc(o)}</span></button>`;
     }).join('')}
-    ${answered ? `<div class="card explain"><b>${s.picked === q.answer ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explanation || '')}</div>
-      <button class="btn block" id="next">${s.i + 1 < s.qs.length ? 'Next' : 'See score'}</button>` : ''}`;
+    ${answered ? `<div class="card explain ${s.picked === q.answer ? 'ok' : 'no'}"><b>${s.picked === q.answer ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explanation || '')}</div>
+      <button class="btn block" id="next">${s.i + 1 < s.qs.length ? 'Next question' : 'See score'}</button>` : ''}`;
+  wireBack();
   app.querySelectorAll('.opt').forEach(b => b.onclick = () => {
     s.picked = Number(b.dataset.i);
     const ok = s.picked === q.answer;
     if (ok) s.right++;
     const bt = (s.byTopic[q.topic] ||= { r: 0, n: 0 }); bt.n++; if (ok) bt.r++;
     viewQuiz(id);
+    document.getElementById('next')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
   document.getElementById('next')?.addEventListener('click', () => { s.i++; s.picked = null; viewQuiz(id); window.scrollTo(0, 0); });
 }
@@ -281,72 +438,49 @@ function quizResult(id, title) {
     save();
   }
   const next = id.startsWith('__') ? null : tp(id).nextReview;
-  app.innerHTML = `<h1>${esc(title)}</h1>
-    <div class="card center"><div class="big">${pct}%</div><p class="muted">${s.right} of ${s.qs.length} correct</p>
-    ${next ? `<p class="small">This topic comes back for review ${next === addDays(today(), 1) ? 'tomorrow' : 'on ' + pretty(next)}.</p>` : ''}</div>
+  const msg = pct >= 80 ? 'Strong work.' : pct >= 60 ? 'Getting there.' : 'This one needs another pass.';
+  app.innerHTML = `<div class="card result ${scoreClass(pct)}"><p class="eyebrow">${esc(title)}</p>
+      <div class="score">${pct}%</div><p><b>${msg}</b></p><p class="hint">${s.right} of ${s.qs.length} correct</p>
+      ${next ? `<p class="hint">Comes back for review ${next === addDays(today(), 1) ? 'tomorrow' : 'on ' + pretty(next)}.</p>` : ''}</div>
     <a class="btn block" href="#/today">Back to today</a>
     <button class="btn block ghost" id="retry">Retake quiz</button>`;
   document.getElementById('retry').onclick = () => { session = null; viewQuiz(id); };
-}
-
-/* ---------- plan ---------- */
-function viewPlan() {
-  const fd = finalDay();
-  const days = studyDays();
-  const t = today();
-  let h = `<h1>Break plan</h1><p class="muted small">${pretty(state.settings.start)} to ${pretty(state.settings.end)} · ${content.topics.length} topics over ${days.length} study days</p>`;
-  for (const d of days) {
-    const ids = (state.plan[d] || []).filter(topicById);
-    if (!ids.length && d !== fd) continue;
-    h += `<div class="card day ${d === t ? 'today' : ''}"><div class="row"><b class="grow">${pretty(d)}</b>${d === t ? '<span class="tag">Today</span>' : ''}</div>`;
-    for (const id of ids) {
-      const p = tp(id);
-      h += `<a class="topic" href="#/topic/${encodeURIComponent(id)}"><span>${esc(topicById(id).title)}</span>
-        <span>${p.done ? `<span class="tag ${p.lastScore < 60 ? 'bad' : 'good'}">${p.lastScore ?? '✓'}${p.lastScore != null ? '%' : ''}</span>` : d < t ? '<span class="tag warn">Behind</span>' : ''}</span></a>`;
-    }
-    if (d === fd) h += `<a class="topic" href="#/quiz/__final"><span><b>Final mixed review</b></span><span></span></a>`;
-    h += `</div>`;
-  }
-  // Topics finished on a day off or outside the window still show.
-  const shown = new Set(days.flatMap(d => state.plan[d] || []));
-  const extra = Object.entries(state.plan).filter(([d]) => !days.includes(d)).flatMap(([, ids]) => ids).filter(id => !shown.has(id) && topicById(id));
-  if (extra.length) h += `<h2>Also done</h2>` + extra.map(id => topicRow(id)).join('');
-  h += `<a class="btn block secondary" href="#/quiz/__mixed">Quick mixed quiz</a>`;
-  app.innerHTML = h;
 }
 
 /* ---------- settings ---------- */
 function viewSettings() {
   const st = state.settings;
   const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  app.innerHTML = `<h1>Settings</h1>
+  app.innerHTML = `<div class="page-head"><h1>Settings</h1></div>
+    <h2>Break</h2>
     <div class="card">
-      <label class="field">Break starts<input type="date" id="start" value="${st.start}"></label>
-      <label class="field">Break ends<input type="date" id="end" value="${st.end}"></label>
-      <div class="field" style="font-weight:600">Days off
-        <div class="days">${names.map((n, i) => `<label><input type="checkbox" value="${i}" ${st.offDays.includes(i) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
+      <div class="two">
+        <label class="field">Starts<input type="date" id="start" value="${st.start}"></label>
+        <label class="field">Ends<input type="date" id="end" value="${st.end}"></label>
       </div>
-      <label class="field" style="font-weight:500"><input type="checkbox" id="final" ${st.finalReview ? 'checked' : ''}> Save the last study day for a mixed final review</label>
+      <div class="field">Days off
+        <div class="days">${names.map((n, i) => `<label><input type="checkbox" value="${i}" ${st.offDays.includes(i) ? 'checked' : ''}><span>${n}</span></label>`).join('')}</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="final" ${st.finalReview ? 'checked' : ''}><span>Save the last study day for a mixed final review</span></label>
       <button class="btn block" id="saveSettings">Save and rebuild plan</button>
-      <p class="small muted">Rebuilding keeps finished topics and spreads the rest over the days left.</p>
+      <p class="hint">Rebuilding keeps finished topics and spreads the rest over the days left.</p>
     </div>
     <h2>Backup</h2>
     <div class="card">
-      <p class="small muted">Progress lives on this device only. Export a backup to move it to another phone or keep it safe.</p>
+      <p class="hint">Progress lives on this device only. Export a backup to move it to another phone or keep it safe.</p>
       <button class="btn block secondary" id="export">Export progress</button>
       <label class="btn block ghost">Import progress<input type="file" id="import" accept="application/json" hidden></label>
-      <button class="btn block ghost" id="reset" style="color:var(--bad)">Reset all progress</button>
+      <button class="btn block ghost danger" id="reset">Reset all progress</button>
     </div>
-    <p class="small muted center">${esc(content.title)} · ${content.topics.length} topics</p>`;
+    <p class="hint center">${esc(content.title)} · ${content.topics.length} topics</p>`;
 
   document.getElementById('saveSettings').onclick = () => {
     const start = document.getElementById('start').value, end = document.getElementById('end').value;
     if (!start || !end || end < start) return alert('End date needs to be on or after the start date.');
-    st.start = start; st.end = end;
-    st.offDays = [...app.querySelectorAll('.days input:checked')].map(x => Number(x.value));
-    if (st.offDays.length === 7) return alert('Leave at least one study day.');
-    st.finalReview = document.getElementById('final').checked;
-    rebuildPlan(); save(); location.hash = '#/plan';
+    const offDays = [...app.querySelectorAll('.days input:checked')].map(x => Number(x.value));
+    if (offDays.length === 7) return alert('Leave at least one study day.');
+    Object.assign(st, { start, end, offDays, finalReview: document.getElementById('final').checked });
+    rebuildPlan(); save(); location.hash = '#/calendar';
   };
   document.getElementById('export').onclick = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -368,16 +502,22 @@ function viewSettings() {
   };
 }
 
-function notFound() { app.innerHTML = `<p>That page doesn't exist.</p><a class="btn" href="#/today">Go to today</a>`; }
+function notFound() { app.innerHTML = `<div class="card empty"><p>That page doesn't exist.</p><a class="btn" href="#/today">Go to today</a></div>`; }
 
 /* ---------- router ---------- */
+const TAB_OF = { today: 'today', calendar: 'calendar', plan: 'calendar', topics: 'topics', settings: 'settings' };
 function route() {
+  navDepth++;
   const [path] = location.hash.slice(2).split('?');
   const [view, raw] = path.split('/');
   const id = raw ? decodeURIComponent(raw) : null;
   if (!['cards', 'quiz'].includes(view)) session = null;
-  document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === (view || 'today')));
-  ({ today: viewToday, plan: viewPlan, settings: viewSettings, topic: () => viewTopic(id), cards: () => viewCards(id), quiz: () => viewQuiz(id) }[view || 'today'] || viewToday)();
+  document.querySelectorAll('.tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === (TAB_OF[view || 'today'] || '')));
+  document.body.dataset.view = view || 'today';
+  ({
+    today: viewToday, calendar: () => viewCalendar(id), plan: () => viewCalendar(), topics: viewTopics, settings: viewSettings,
+    topic: () => viewTopic(id), cards: () => viewCards(id), quiz: () => viewQuiz(id)
+  }[view || 'today'] || viewToday)();
   window.scrollTo(0, 0);
 }
 

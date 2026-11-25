@@ -15,14 +15,19 @@
 </head>
 <body>
   <header class="topbar">
-    <a href="#/today" class="brand">Study with Gabi</a>
+    <a href="#/today" class="brand"><img src="icon-192.png" alt="" width="26" height="26">Study with Gabi</a>
     <span id="offline" class="offline" hidden>Offline</span>
   </header>
-  <main id="app"><p class="muted center">Loading…</p></main>
+  <main id="app"><p class="hint center">Loading…</p></main>
   <nav class="tabs">
-    <a href="#/today" data-tab="today">Today</a>
-    <a href="#/plan" data-tab="plan">Plan</a>
-    <a href="#/settings" data-tab="settings">Settings</a>
+    <a href="#/today" data-tab="today">
+      <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Today</a>
+    <a href="#/calendar" data-tab="calendar">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+    <a href="#/topics" data-tab="topics">
+      <svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM13 4h5.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H13z"/></svg>Topics</a>
+    <a href="#/settings" data-tab="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</a>
   </nav>
   <script src="app.js"></script>
 </body>

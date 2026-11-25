@@ -9,6 +9,7 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 | `index.html`, `app.js`, `styles.css` | The app |
 | `content.json` | **The study material.** This is the only file you change each semester. |
 | `sw.js`, `manifest.webmanifest`, icons | Make it installable and work offline |
+| `slides/` | Drop source PowerPoints/PDFs here to turn into content.json. Never uploaded (listed in `.gitignore`). |
 
 ## Put it online (GitHub Pages, free, about 15 minutes)
 
@@ -29,6 +30,8 @@ A small study app that runs on a phone. Each day it shows what to study, then gi
 ## How it works
 
 - **Today:** the topics planned for today, anything carried over from missed days, and up to 3 review topics that are due.
+- **Calendar:** the whole break as a month view. Each day shows a dot per topic in its block's color (faint = planned, solid = done, orange ring = behind). Tap a day to see its topics and reviews.
+- **Topics:** every topic grouped by block, with progress per block and when each is planned or due for review.
 - **Each topic:** key points, then flashcards (cards she marks "Again" come back a few cards later), then a quiz with explanations.
 - **Spacing:** the quiz score decides when a topic comes back. Under 60% returns the next day, 60 to 79% in 3 days, and 80% or higher in 7 days.
 - **Last study day:** a mixed final quiz across everything, weighted toward her weakest topics. This can be turned off in Settings.

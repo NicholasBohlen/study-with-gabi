@@ -1,6 +1,6 @@
 // Offline support. Serves from cache right away, then refreshes the cache in the
 // background, so the app opens with no signal and picks up updates next launch.
-const CACHE = 'study-with-gabi-v1';
+const CACHE = 'study-with-gabi-v2';
 const SHELL = [
   './', './index.html', './app.js', './styles.css', './manifest.webmanifest',
   './content.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'
